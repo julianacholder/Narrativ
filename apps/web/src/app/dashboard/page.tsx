@@ -54,12 +54,92 @@ interface Activity {
   isRead: boolean;
 }
 
+const SessionDebugger = () => {
+  const { data: session, isPending, error } = authClient.useSession();
+  const [cookies, setCookies] = useState('');
+
+  useEffect(() => {
+    setCookies(document.cookie);
+  }, []);
+
+  if (process.env.NODE_ENV !== 'development') return null;
+
+  return (
+    <div className="fixed top-4 right-4 bg-white border border-gray-300 p-4 rounded-lg shadow-lg z-50 max-w-lg max-h-96 overflow-auto text-xs">
+      <h3 className="font-bold mb-2 text-sm">🔍 Session Debug Panel</h3>
+      <div className="space-y-3">
+        <div className="p-2 bg-blue-50 rounded">
+          <h4 className="font-semibold text-blue-800 mb-1">Session Status</h4>
+          <div className="space-y-1">
+            <p><strong>isPending:</strong> <span className={isPending ? 'text-orange-600' : 'text-green-600'}>{isPending ? 'true' : 'false'}</span></p>
+            <p><strong>hasSession:</strong> <span className={session ? 'text-green-600' : 'text-red-600'}>{session ? 'true' : 'false'}</span></p>
+            <p><strong>hasUser:</strong> <span className={session?.user ? 'text-green-600' : 'text-red-600'}>{session?.user ? 'true' : 'false'}</span></p>
+            {error && <p className="text-red-600"><strong>Error:</strong> {error.message}</p>}
+          </div>
+        </div>
+
+        {session?.user && (
+          <div className="p-2 bg-green-50 rounded">
+            <h4 className="font-semibold text-green-800 mb-1">User Info</h4>
+            <div className="space-y-1">
+              <p><strong>ID:</strong> {session.user.id || 'null'}</p>
+              <p><strong>Email:</strong> {session.user.email || 'null'}</p>
+              <p><strong>Name:</strong> {session.user.name || 'null'}</p>
+              <p><strong>Image:</strong> {session.user.image ? 'Yes' : 'No'}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="p-2 bg-gray-50 rounded">
+          <h4 className="font-semibold text-gray-800 mb-1">Full Session</h4>
+          <pre className="whitespace-pre-wrap break-all text-xs bg-white p-2 rounded border max-h-20 overflow-auto">
+            {JSON.stringify(session, null, 2)}
+          </pre>
+        </div>
+
+        <div className="p-2 bg-yellow-50 rounded">
+          <h4 className="font-semibold text-yellow-800 mb-1">Cookies</h4>
+          <pre className="whitespace-pre-wrap break-all text-xs bg-white p-2 rounded border max-h-16 overflow-auto">
+            {cookies || 'No cookies found'}
+          </pre>
+        </div>
+
+        <button 
+          onClick={async () => {
+            try {
+              const response = await fetch('/api/auth/session', {
+                method: 'GET',
+                credentials: 'include',
+                headers: {
+                  'Content-Type': 'application/json',
+                }
+              });
+              const sessionData = await response.json();
+              console.log('🔍 Manual session check:', {
+                status: response.status,
+                ok: response.ok,
+                data: sessionData
+              });
+            } catch (error) {
+              console.error('❌ Manual session check failed:', error);
+            }
+          }}
+          className="w-full p-2 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+        >
+          Check Session Manually
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const Dashboard = () => {
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
   const [posts, setPosts] = useState<Post[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -85,61 +165,115 @@ const Dashboard = () => {
 
   useEffect(() => {
     async function fetchDashboardData() {
-      if (!session?.user) {
-        console.log('❌ No session or user found');
+      console.log('🔄 Starting dashboard data fetch...');
+      console.log('📊 Session Hook Values:', {
+        isPending,
+        hasSession: !!session,
+        sessionKeys: session ? Object.keys(session) : null,
+        sessionData: session
+      });
+
+      if (session) {
+        console.log('👤 Session User Data:', {
+          hasUser: !!session.user,
+          userId: session.user?.id,
+          userEmail: session.user?.email,
+          userName: session.user?.name,
+          userKeys: session.user ? Object.keys(session.user) : null,
+          fullUser: session.user
+        });
+      }
+
+      if (isPending) {
+        console.log('⏳ Session is still pending, waiting...');
         return;
       }
-      
+
+      if (!session?.user) {
+        console.log('❌ No session or user found');
+        console.log('🔍 Detailed session check:', {
+          session,
+          hasSession: !!session,
+          user: session?.user,
+          hasUser: !!session?.user,
+          userId: session?.user?.id
+        });
+        setError('No authenticated user found');
+        setLoading(false);
+        return;
+      }
+
       try {
         const userId = session.user.id;
+        console.log('✅ Found userId:', userId);
         
         if (!userId) {
           console.error('❌ No userId found in session');
+          console.log('🔍 Session user object:', session.user);
+          setError('User ID not found in session');
           setLoading(false);
           return;
         }
-        
-        const postsResponse = await fetch(`/api/users/posts?userId=${userId}`, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        });
 
-        if (postsResponse.ok) {
-          const postsData = await postsResponse.json();
-          setPosts(postsData);
-        } else {
-          const errorText = await postsResponse.text();
-          console.error('❌ Failed to fetch posts:', errorText);
-          toast.error('Failed to load posts');
-        }
-
-        const activitiesResponse = await fetch(`/api/users/activities?userId=${userId}`, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
+        const mockPosts = [
+          {
+            id: '1',
+            title: 'My First Blog Post',
+            category: 'General',
+            status: 'Published' as const,
+            date: new Date().toISOString(),
+            views: 42,
+            comments: 3,
+            likes: 7,
+            published: true,
+          },
+          {
+            id: '2', 
+            title: 'Draft Post',
+            category: 'Technology',
+            status: 'Draft' as const,
+            date: new Date(Date.now() - 86400000).toISOString(),
+            views: 0,
+            comments: 0,
+            likes: 0,
+            published: false,
           }
-        });
-        
-        if (activitiesResponse.ok) {
-          const activitiesData = await activitiesResponse.json();
-          setActivities(activitiesData);
-        }
+        ];
+
+        const mockActivities = [
+          {
+            id: 'activity-1',
+            type: 'comment' as const,
+            message: 'New comment on your post',
+            postTitle: 'My First Blog Post',
+            author: 'John Doe',
+            date: new Date().toISOString(),
+            isRead: false,
+          }
+        ];
+
+        setPosts(mockPosts);
+        setActivities(mockActivities);
+        console.log('✅ Mock data loaded successfully for userId:', userId);
 
       } catch (error) {
-        console.error('💥 Error fetching dashboard data:', error);
+        console.error('💥 Error with mock data:', error);
+        setError(`Dashboard error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
         setLoading(false);
       }
     }
 
-    if (session?.user) {
+    console.log('🎯 useEffect triggered with dependencies:', { 
+      sessionExists: !!session, 
+      isPending,
+      timestamp: new Date().toISOString()
+    });
+
+    if (!isPending) {
       fetchDashboardData();
     }
-  }, [session]);
+  }, [session, isPending]);
 
   const handleSignOut = async () => {
     try {
@@ -237,19 +371,48 @@ const Dashboard = () => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600 mx-auto"></div>
           <p className="mt-4 text-slate-600">Loading dashboard...</p>
+          <p className="mt-2 text-xs text-slate-500">isPending: {isPending ? 'true' : 'false'}</p>
+          <p className="text-xs text-slate-500">loading: {loading ? 'true' : 'false'}</p>
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg max-w-md">
+              <p className="text-red-600 text-sm">Error: {error}</p>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-2"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
   if (!session?.user) {
-    return null;
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+        <SessionDebugger />
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">Authentication Required</h2>
+          <p className="text-slate-600 mb-4">Please sign in to access your dashboard.</p>
+          <p className="text-xs text-slate-500 mb-4">Debug: Session exists: {session ? 'true' : 'false'}, User exists: {session?.user ? 'true' : 'false'}</p>
+          <Link href="/sign-in">
+            <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
+              Sign In
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Mobile-Responsive Navigation */}
-      <nav className="border-b bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+      <SessionDebugger />
+      <nav className="border-b bg-white/90 backdrop-blur-md sticky top-0 z-40 shadow-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <Link href="/" className="flex items-center space-x-2">
@@ -259,7 +422,6 @@ const Dashboard = () => {
               </span>
             </Link>
             
-            {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-4">
               <Link href="/">
                 <Button variant="ghost" className="hover:text-indigo-600">
@@ -280,7 +442,6 @@ const Dashboard = () => {
                 </Button>
               </Link>
               
-              {/* Desktop User Menu */}
               <div className="relative" ref={userMenuRef}>
                 <Button
                   variant="ghost"
@@ -322,7 +483,6 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Mobile Menu Button */}
             <div className="md:hidden">
               <Button
                 variant="ghost"
@@ -335,11 +495,9 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Mobile Menu */}
           {showMobileMenu && (
             <div className="md:hidden mt-4 pb-4 border-t" ref={mobileMenuRef}>
               <div className="flex flex-col space-y-2 pt-4">
-                {/* User Info */}
                 <div className="flex items-center space-x-3 px-3 py-2 bg-slate-50 rounded-lg mb-2">
                   <Avatar className="h-10 w-10">
                     <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
@@ -409,15 +567,28 @@ const Dashboard = () => {
       </nav>
 
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-600">Error: {error}</p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="mt-2"
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </Button>
+          </div>
+        )}
+
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
             Welcome, {session.user.name}
           </h1>
           <p className="text-slate-600">Manage your blog posts and track your performance</p>
+          <p className="text-xs text-slate-400 mt-1">Debug: UserID: {session.user.id}</p>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
           {stats.map((stat, index) => (
             <Card key={index} className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-0 shadow-md bg-white/80 backdrop-blur-sm">
@@ -435,7 +606,6 @@ const Dashboard = () => {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6 md:gap-8">
-          {/* Recent Posts */}
           <div className="lg:col-span-2 space-y-6 md:space-y-8">
             <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
               <CardHeader className="flex flex-row items-center justify-between">
@@ -524,7 +694,6 @@ const Dashboard = () => {
               </CardContent>
             </Card>
 
-            {/* Recent Activity */}
             <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="text-lg md:text-xl">Recent Activity</CardTitle>
@@ -565,12 +734,9 @@ const Dashboard = () => {
             </Card>
           </div>
 
-          {/* Analytics Sidebar */}
           <div className="space-y-4 md:space-y-6">
-            {/* Using the CategoryStats component */}
             <CategoryStats posts={posts} />
 
-            {/* Quick Actions */}
             <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Quick Actions</CardTitle>
