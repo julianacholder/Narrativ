@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +24,9 @@ import {
   Menu,
   X
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 import { useCategories } from "@/lib/categories";
 import { CategoryBadge } from "@/components/ui/category-badge";
@@ -55,19 +56,22 @@ interface Activity {
 
 const Dashboard = () => {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const userId = searchParams.get('userId');
-  
+  const { data: session, isPending } = authClient.useSession();
   const [posts, setPosts] = useState<Post[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  const { getCategoryLabel } = useCategories();
+  const { getCategoryColor, getCategoryLabel } = useCategories();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
         setShowMobileMenu(false);
       }
@@ -81,14 +85,27 @@ const Dashboard = () => {
 
   useEffect(() => {
     async function fetchDashboardData() {
-      if (!userId) {
-        console.error('❌ No userId found in URL');
-        setLoading(false);
+      if (!session?.user) {
+        console.log('❌ No session or user found');
         return;
       }
       
-      try {        
-        const postsResponse = await fetch(`/api/users/posts?userId=${userId}`);
+      try {
+        const userId = session.user.id;
+        
+        if (!userId) {
+          console.error('❌ No userId found in session');
+          setLoading(false);
+          return;
+        }
+        
+        const postsResponse = await fetch(`/api/users/posts?userId=${userId}`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
 
         if (postsResponse.ok) {
           const postsData = await postsResponse.json();
@@ -99,7 +116,13 @@ const Dashboard = () => {
           toast.error('Failed to load posts');
         }
 
-        const activitiesResponse = await fetch(`/api/users/activities?userId=${userId}`);
+        const activitiesResponse = await fetch(`/api/users/activities?userId=${userId}`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
         
         if (activitiesResponse.ok) {
           const activitiesData = await activitiesResponse.json();
@@ -113,10 +136,25 @@ const Dashboard = () => {
       }
     }
 
-    if (userId) {
+    if (session?.user) {
       fetchDashboardData();
     }
-  }, [userId]);
+  }, [session]);
+
+  const handleSignOut = async () => {
+    try {
+      const loadingToast = toast.loading('Signing out...');
+      await authClient.signOut();
+      toast.dismiss(loadingToast);
+      toast.success('Signed out successfully');
+      setShowUserMenu(false);
+      setShowMobileMenu(false);
+      router.push('/');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      toast.error('Failed to sign out');
+    }
+  };
 
   const handleDeletePost = async (postId: string): Promise<void> => {
     toast('Are you sure you want to delete this post?', {
@@ -124,9 +162,11 @@ const Dashboard = () => {
       action: {
         label: 'Delete',
         onClick: async () => {
-          try {            
+          try {
+            const userId = session?.user?.id;
+            
             if (!userId) {
-              toast.error('User ID not found');
+              toast.error('Authentication error');
               return;
             }
 
@@ -134,6 +174,7 @@ const Dashboard = () => {
             
             const response = await fetch(`/api/posts/${postId}/delete?userId=${userId}`, {
               method: 'DELETE',
+              credentials: 'include',
             });
 
             toast.dismiss(loadingToast);
@@ -190,7 +231,7 @@ const Dashboard = () => {
     }
   ];
 
-  if (loading) {
+  if (isPending || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
@@ -201,26 +242,13 @@ const Dashboard = () => {
     );
   }
 
-  if (!userId) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">User not found</h2>
-          <p className="text-slate-600">Please provide a valid user ID in the URL</p>
-          <Button 
-            onClick={() => router.push('/')}
-            className="mt-4 bg-gradient-to-r from-indigo-600 to-purple-600"
-          >
-            Go to Home
-          </Button>
-        </div>
-      </div>
-    );
+  if (!session?.user) {
+    return null;
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Simplified Navigation */}
+      {/* Mobile-Responsive Navigation */}
       <nav className="border-b bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
@@ -239,18 +267,59 @@ const Dashboard = () => {
                   View Public Blog
                 </Button>
               </Link>
-              <Link href={`/my-posts?userId=${userId}`}>
+              <Link href="/my-posts">
                 <Button variant="ghost" className="hover:text-indigo-600">
                   <FileText className="h-4 w-4 mr-2" />
                   My Blog
                 </Button>
               </Link>
-              <Link href={`/new-post?userId=${userId}`}>
+              <Link href="/new-post">
                 <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                   <Plus className="h-4 w-4 mr-2" />
                   New Post
                 </Button>
               </Link>
+              
+              {/* Desktop User Menu */}
+              <div className="relative" ref={userMenuRef}>
+                <Button
+                  variant="ghost"
+                  className="flex items-center space-x-2 hover:bg-indigo-50"
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
+                    <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium">{session.user.name}</span>
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+                
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border">
+                    <div className="px-4 py-2 border-b">
+                      <p className="text-sm font-medium text-gray-900">{session.user.name}</p>
+                      <p className="text-sm text-gray-500 truncate">{session.user.email}</p>
+                    </div>
+                    <Link href="/profile">
+                      <button 
+                        className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setShowUserMenu(false)}
+                      >
+                        <User className="h-4 w-4 mr-2" />
+                        Edit Profile
+                      </button>
+                    </Link>
+                    <button
+                      onClick={handleSignOut}
+                      className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Mobile Menu Button */}
@@ -270,7 +339,19 @@ const Dashboard = () => {
           {showMobileMenu && (
             <div className="md:hidden mt-4 pb-4 border-t" ref={mobileMenuRef}>
               <div className="flex flex-col space-y-2 pt-4">
-                <Link href={`/new-post?userId=${userId}`}>
+                {/* User Info */}
+                <div className="flex items-center space-x-3 px-3 py-2 bg-slate-50 rounded-lg mb-2">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
+                    <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium text-sm">{session.user.name}</p>
+                    <p className="text-xs text-gray-500">{session.user.email}</p>
+                  </div>
+                </div>
+
+                <Link href="/new-post">
                   <Button 
                     className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 mb-2"
                     onClick={closeMobileMenu}
@@ -291,7 +372,7 @@ const Dashboard = () => {
                   </Button>
                 </Link>
 
-                <Link href={`/my-posts?userId=${userId}`}>
+                <Link href="/my-blog">
                   <Button 
                     variant="ghost" 
                     className="w-full justify-start hover:text-indigo-600"
@@ -301,6 +382,26 @@ const Dashboard = () => {
                     My Blog
                   </Button>
                 </Link>
+
+                <Link href="/profile">
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-start hover:text-indigo-600"
+                    onClick={closeMobileMenu}
+                  >
+                    <User className="h-4 w-4 mr-2" />
+                    Edit Profile
+                  </Button>
+                </Link>
+
+                <Button 
+                  variant="ghost" 
+                  className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={handleSignOut}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </Button>
               </div>
             </div>
           )}
@@ -311,7 +412,7 @@ const Dashboard = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
-            Dashboard
+            Welcome, {session.user.name}
           </h1>
           <p className="text-slate-600">Manage your blog posts and track your performance</p>
         </div>
@@ -342,7 +443,7 @@ const Dashboard = () => {
                   <CardTitle className="text-lg md:text-xl">Recent Posts</CardTitle>
                   <CardDescription className="text-sm">Manage your blog posts</CardDescription>
                 </div>
-                <Link href={`/new-post?userId=${userId}`} className="hidden sm:block">
+                <Link href="/new-post" className="hidden sm:block">
                   <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                     <Plus className="h-4 w-4 mr-2" />
                     New Post
@@ -385,7 +486,7 @@ const Dashboard = () => {
                           </div>
                         </div>
                         <div className="flex items-center space-x-1 md:space-x-2 flex-shrink-0">
-                          <Link href={`/new-post?id=${post.id}&userId=${userId}`}>
+                          <Link href={`/new-post?id=${post.id}`}>
                             <Button variant="ghost" size="sm" className="hover:text-indigo-600 h-8 w-8 md:h-9 md:w-9 p-0">
                               <Edit className="h-3 w-3 md:h-4 md:w-4" />
                             </Button>
@@ -411,7 +512,7 @@ const Dashboard = () => {
                       <BookOpen className="h-12 w-12 md:h-16 md:w-16 text-slate-400 mx-auto mb-4" />
                       <h3 className="text-base md:text-lg font-semibold text-slate-600 mb-2">No posts yet</h3>
                       <p className="text-sm md:text-base text-slate-500 mb-4">Create your first blog post to get started</p>
-                      <Link href={`/new-post?userId=${userId}`}>
+                      <Link href="/new-post">
                         <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                           <Plus className="h-4 w-4 mr-2" />
                           Create Post
@@ -476,7 +577,7 @@ const Dashboard = () => {
                 <CardDescription className="text-sm">Common tasks</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Link href={`/new-post?userId=${userId}`}>
+                <Link href="/new-post">
                   <Button variant="outline" className="w-full justify-start hover:bg-indigo-50 text-sm">
                     <Plus className="h-4 w-4 mr-2" />
                     Create New Post
@@ -488,7 +589,7 @@ const Dashboard = () => {
                     View Public Blog
                   </Button>
                 </Link>
-                <Link href={`/my-posts?userId=${userId}`}>
+                <Link href="/my-posts">
                   <Button variant="outline" className="w-full justify-start hover:bg-purple-50 text-sm">
                     <FileText className="h-4 w-4 mr-2" />
                     My Blog
