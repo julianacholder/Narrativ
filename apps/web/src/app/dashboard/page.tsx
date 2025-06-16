@@ -28,8 +28,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
-
-// Import the new category system
 import { useCategories } from "@/lib/categories";
 import { CategoryBadge } from "@/components/ui/category-badge";
 import { CategoryStats } from "@/components/ui/category-stats";
@@ -67,10 +65,8 @@ const Dashboard = () => {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Use the category hook
   const { getCategoryColor, getCategoryLabel } = useCategories();
 
-  // Close menus when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -90,7 +86,7 @@ const Dashboard = () => {
   useEffect(() => {
     async function fetchDashboardData() {
       if (!session?.user) {
-        console.log(' No session or user in frontend');
+        console.log('❌ No session or user found');
         return;
       }
       
@@ -98,7 +94,7 @@ const Dashboard = () => {
         const userId = session.user.id;
         
         if (!userId) {
-          console.error(' No userId found in session');
+          console.error('❌ No userId found in session');
           setLoading(false);
           return;
         }
@@ -113,11 +109,10 @@ const Dashboard = () => {
 
         if (postsResponse.ok) {
           const postsData = await postsResponse.json();
-          console.log(' Posts data received:', postsData);
           setPosts(postsData);
         } else {
           const errorText = await postsResponse.text();
-          console.error(' Failed to fetch posts:', errorText);
+          console.error('❌ Failed to fetch posts:', errorText);
           toast.error('Failed to load posts');
         }
 

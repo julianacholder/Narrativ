@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { PenTool, ArrowLeft, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
-import { toast } from "sonner"; // Import sonner toast
+import { toast } from "sonner";
 
 const Login = () => {
   const router = useRouter();
@@ -30,59 +30,100 @@ const Login = () => {
       return;
     }
 
-    await signIn.email(
-      {
-        email,
-        password
-      },
-      {
-        onRequest: (ctx) => {
-          setIsLoading(true);
+    setIsLoading(true);
+
+    try {
+      await signIn.email(
+        {
+          email,
+          password
         },
-        onResponse: (ctx) => {
-          setIsLoading(false);
-          // Success - redirect to dashboard
-          router.push("/dashboard");
-        },
-        onError: (ctx) => {
-          setIsLoading(false);
-          // Handle specific error cases
-          const errorMessage = ctx.error?.message?.toLowerCase() || "";
-          
-          if (errorMessage.includes("invalid email") || errorMessage.includes("user not found")) {
-            toast.error("No account found with this email");
-          } else if (errorMessage.includes("password") || errorMessage.includes("credentials")) {
-            toast.error("Incorrect password. Please try again.");
-          } else {
-            toast.error("Login failed. Please try again.");
+        {
+          onRequest: (ctx) => {
+            console.log("🔐 Login request started...");
+          },
+          onResponse: (ctx) => {
+            console.log("✅ Login response received:", ctx);
+            setIsLoading(false);
+            
+            // Check if response is successful
+            if (ctx.response.ok) {
+              console.log("✅ Login successful, redirecting to dashboard...");
+              toast.success("Login successful!");
+              
+              // Add a small delay to ensure session is properly set
+              setTimeout(() => {
+                router.push("/dashboard");
+              }, 500);
+            } else {
+              console.error("❌ Login failed with status:", ctx.response.status);
+              toast.error("Login failed. Please check your credentials.");
+            }
+          },
+          onError: (ctx) => {
+            console.error("❌ Login error:", ctx.error);
+            setIsLoading(false);
+            
+            // Handle specific error cases
+            const errorMessage = ctx.error?.message?.toLowerCase() || "";
+            
+            if (errorMessage.includes("invalid email") || errorMessage.includes("user not found")) {
+              toast.error("No account found with this email");
+            } else if (errorMessage.includes("password") || errorMessage.includes("credentials")) {
+              toast.error("Incorrect password. Please try again.");
+            } else if (errorMessage.includes("invalid credentials")) {
+              toast.error("Invalid email or password. Please try again.");
+            } else {
+              toast.error("Login failed. Please try again.");
+            }
           }
-          console.error("Login failed:", ctx.error);
         }
-      }
-    );
+      );
+
+    } catch (error) {
+      console.error("💥 Login catch error:", error);
+      setIsLoading(false);
+      toast.error("Login failed. Please try again.");
+    }
   };
 
   const handleGoogleLogin = async () => {
-    await signIn.social(
-      {
-        provider: "google",
-        callbackURL: "/dashboard"
-      },
-      {
-        onRequest: (ctx) => {
-          setIsLoading(true);
+    setIsLoading(true);
+    
+    try {
+      await signIn.social(
+        {
+          provider: "google",
+          callbackURL: "/dashboard"
         },
-        onResponse: (ctx) => {
-          setIsLoading(false);
-        },
-        onError: (ctx) => {
-          setIsLoading(false);
-          // Handle Google sign-in error
-          toast.error("Google sign-in failed. Please try again.");
-          console.error("Google sign-in failed:", ctx.error);
+        {
+          onRequest: (ctx) => {
+            console.log("🔐 Google login request started...");
+          },
+          onResponse: (ctx) => {
+            console.log("✅ Google login response:", ctx);
+            setIsLoading(false);
+            
+            // For social login, check if response is successful
+            if (ctx.response.ok) {
+              console.log("✅ Google login successful");
+              toast.success("Google login successful!");
+              // Social login usually handles redirect automatically
+            }
+          },
+          onError: (ctx) => {
+            console.error("❌ Google login error:", ctx.error);
+            setIsLoading(false);
+            toast.error("Google sign-in failed. Please try again.");
+          }
         }
-      }
-    );
+      );
+
+    } catch (error) {
+      console.error("💥 Google login catch error:", error);
+      setIsLoading(false);
+      toast.error("Google sign-in failed. Please try again.");
+    }
   };
 
   return (
