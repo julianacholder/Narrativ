@@ -72,24 +72,28 @@ export default function HomePage() {
   }, []);
 
   // Fetch posts when component mounts
-  useEffect(() => {
-    async function fetchPosts() {
-      try {
-        const response = await fetch('/api/posts');
-        if (!response.ok) {
-          throw new Error('Failed to fetch posts');
-        }
-        const data = await response.json();
-        setPosts(data);
-      } catch (error) {
-        console.error('Error fetching posts:', error);
-      } finally {
-        setLoading(false);
+useEffect(() => {
+  async function fetchPosts() {
+    const fullUrl = `${window.location.origin}/api/posts`;
+    console.log("Requesting:", fullUrl); // 🔍 Logs the full URL
+
+    try {
+      const response = await fetch(fullUrl);
+      if (!response.ok) {
+        throw new Error('Failed to fetch posts');
       }
+      const data = await response.json();
+      setPosts(data);
+    } catch (error) {
+      console.error('Error fetching posts:', error);
+    } finally {
+      setLoading(false);
     }
-    
-    fetchPosts();
-  }, []);
+  }
+
+  fetchPosts();
+}, []);
+
 
   // Reset displayed posts when search or category changes
   useEffect(() => {

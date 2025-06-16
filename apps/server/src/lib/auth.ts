@@ -12,7 +12,7 @@ export const auth = betterAuth({
     schema: schema,
   }),
   trustedOrigins: [
-     "http://localhost:3001",
+     "http://localhost:3001", 'https://narrativ-web.vercel.app',
     process.env.CORS_ORIGIN || "",
   ],
   emailAndPassword: {
