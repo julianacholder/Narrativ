@@ -1,4 +1,4 @@
-// Create this file at: src/app/api/posts/[id]/delete/route.ts
+
 import { db } from '@server/db';
 import { posts } from '@server/db/schema';
 import { eq } from 'drizzle-orm';
@@ -7,10 +7,13 @@ import { auth } from '@server/lib/auth';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log('🚀 Delete Post API called for ID:', params.id);
+    // Await the params since they're now a Promise in newer Next.js versions
+    const { id } = await params;
+    
+    console.log('🚀 Delete Post API called for ID:', id);
     
     // Try to get session but don't fail if it doesn't work
     let userId: string | null = null;
@@ -47,7 +50,7 @@ export async function DELETE(
     const existingPost = await db
       .select()
       .from(posts)
-      .where(eq(posts.id, params.id))
+      .where(eq(posts.id, id))
       .limit(1);
 
     if (existingPost.length === 0) {
@@ -58,13 +61,13 @@ export async function DELETE(
       return Response.json({ error: 'You can only delete your own posts' }, { status: 403 });
     }
 
-    await db.delete(posts).where(eq(posts.id, params.id));
+    await db.delete(posts).where(eq(posts.id, id));
 
-    console.log('✅ Post deleted successfully:', params.id);
+    console.log('✅ Post deleted successfully:', id);
     return Response.json({ 
       success: true, 
       message: 'Post deleted successfully',
-      deletedId: params.id
+      deletedId: id
     });
 
   } catch (error) {

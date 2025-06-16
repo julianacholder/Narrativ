@@ -49,6 +49,8 @@ interface Activity {
   isRead: boolean;
 }
 
+import { toast } from "sonner"; // Import toast from sonner directly
+
 const Dashboard = () => {
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
@@ -109,6 +111,9 @@ const Dashboard = () => {
             statusText: postsResponse.statusText,
             error: errorText
           });
+          toast.error('Failed to load posts', {
+            description: 'Please refresh the page or try again'
+          });
         }
 
         console.log('📡 Making request to /api/users/activities with userId:', userId);
@@ -154,47 +159,84 @@ const Dashboard = () => {
 
   const handleSignOut = async () => {
     try {
+      const loadingToast = toast.loading('Signing out...');
+      
       await authClient.signOut();
+      
+      toast.dismiss(loadingToast);
+      toast.success('Signed out successfully');
+      
       router.push('/');
     } catch (error) {
       console.error('Error signing out:', error);
+      toast.error('Failed to sign out', {
+        description: 'Please try again'
+      });
     }
   };
 
   const handleDeletePost = async (postId: string): Promise<void> => {
-    if (!confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
-      return;
-    }
+    // Show confirmation toast with action buttons
+    toast('Are you sure you want to delete this post?', {
+      description: 'This action cannot be undone.',
+      action: {
+        label: 'Delete',
+        onClick: async () => {
+          try {
+            const userId = session?.user?.id;
+            
+            if (!userId) {
+              toast.error('Authentication error', {
+                description: 'Please sign in again'
+              });
+              return;
+            }
 
-    try {
-      const userId = session?.user?.id;
-      
-      if (!userId) {
-        console.error('No userId available');
-        return;
-      }
+            // Show loading toast
+            const loadingToast = toast.loading('Deleting post...', {
+              description: 'Please wait while we delete your post'
+            });
 
-      console.log('🗑️ Deleting post:', postId);
-      
-      const response = await fetch(`/api/posts/${postId}/delete?userId=${userId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
+            console.log('🗑️ Deleting post:', postId);
+            
+            const response = await fetch(`/api/posts/${postId}/delete?userId=${userId}`, {
+              method: 'DELETE',
+              credentials: 'include',
+            });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to delete post');
-      }
+            // Dismiss loading toast
+            toast.dismiss(loadingToast);
 
-      // Remove the post from the local state
-      setPosts(prevPosts => prevPosts.filter(post => post.id !== postId));
-      
-      console.log('✅ Post deleted successfully');
-      
-    } catch (error) {
-      console.error('❌ Error deleting post:', error);
-      alert('Failed to delete post. Please try again.');
-    }
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Failed to delete post');
+            }
+
+            // Remove the post from the local state
+            setPosts(prevPosts => prevPosts.filter(post => post.id !== postId));
+            
+            // Show success toast
+            toast.success('Post deleted successfully', {
+              description: 'Your post has been permanently deleted'
+            });
+            
+            console.log('✅ Post deleted successfully');
+            
+          } catch (error) {
+            console.error('❌ Error deleting post:', error);
+            toast.error('Failed to delete post', {
+              description: 'Please try again or contact support if the problem persists'
+            });
+          }
+        },
+      },
+      cancel: {
+        label: 'Cancel',
+        onClick: () => {
+          toast.dismiss();
+        },
+      },
+    });
   };
 
   const stats = [
@@ -286,7 +328,7 @@ const Dashboard = () => {
                 My Posts
               </Button>
             </Link>
-            <Link href="/new-post">
+            <Link href="/create-post">
               <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                 <Plus className="h-4 w-4 mr-2" />
                 New Post
@@ -374,7 +416,7 @@ const Dashboard = () => {
                   <CardTitle className="text-xl">Recent Posts</CardTitle>
                   <CardDescription>Manage your blog posts</CardDescription>
                 </div>
-                <Link href="/new-post">
+                <Link href="/create-post">
                   <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                     <Plus className="h-4 w-4 mr-2" />
                     New Post
@@ -443,7 +485,7 @@ const Dashboard = () => {
                       <BookOpen className="h-16 w-16 text-slate-400 mx-auto mb-4" />
                       <h3 className="text-lg font-semibold text-slate-600 mb-2">No posts yet</h3>
                       <p className="text-slate-500 mb-4">Create your first blog post to get started</p>
-                      <Link href="/new-post">
+                      <Link href="/create-post">
                         <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                           <Plus className="h-4 w-4 mr-2" />
                           Create Post
@@ -527,7 +569,7 @@ const Dashboard = () => {
                 <CardDescription>Common tasks</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Link href="/new-post">
+                <Link href="/create-post">
                   <Button variant="outline" className="w-full justify-start hover:bg-indigo-50">
                     <Plus className="h-4 w-4 mr-2" />
                     Create New Post

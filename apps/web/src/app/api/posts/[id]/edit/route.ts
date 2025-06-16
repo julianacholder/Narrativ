@@ -7,10 +7,13 @@ import { auth } from '@server/lib/auth';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log('🚀 Update Post API called for ID:', params.id);
+    // Await the params since they're now a Promise in newer Next.js versions
+    const { id } = await params;
+    
+    console.log('🚀 Update Post API called for ID:', id);
     
     // Try to get session but don't fail if it doesn't work
     let userId: string | null = null;
@@ -52,7 +55,7 @@ export async function PUT(
     const existingPost = await db
       .select()
       .from(posts)
-      .where(eq(posts.id, params.id))
+      .where(eq(posts.id, id))
       .limit(1);
 
     if (existingPost.length === 0) {
@@ -83,7 +86,7 @@ export async function PUT(
         published: status === 'published',
         updatedAt: new Date(),
       })
-      .where(eq(posts.id, params.id))
+      .where(eq(posts.id, id))
       .returning();
 
     console.log('✅ Post updated successfully:', updatedPost[0]);
