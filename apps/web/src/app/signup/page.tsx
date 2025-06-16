@@ -15,7 +15,8 @@ import { PenTool, ArrowLeft, Eye, EyeOff, Loader2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { signUp } from "@/lib/auth-client";  // <-- assuming you're using better-auth client SDK
+import { signUp } from "@/lib/auth-client";
+import { toast } from "sonner"; // Import sonner toast
 
 const SignupPage = () => {
   const router = useRouter();
@@ -77,22 +78,30 @@ const SignupPage = () => {
         password: formData.password,
         name: formData.name.trim(),
         image: image ? await convertImageToBase64(image) : "",
-        callbackURL: "/dashboard", // optional callback if better-auth supports it
+        callbackURL: "/dashboard",
         fetchOptions: {
           onRequest: () => setIsLoading(true),
           onResponse: () => setIsLoading(false),
           onError: (ctx) => {
-            setError(ctx.error.message || "An error occurred");
+            if (ctx.error.message?.toLowerCase().includes("email already exists")) {
+              toast.error("Account with this email already exists. Please try again.");
+            } else {
+              setError(ctx.error.message || "An error occurred");
+            }
           },
           onSuccess: () => {
-            setSuccess("Account created successfully! Redirecting...");
+            toast.success("Account created successfully!");
             setTimeout(() => router.push("/login"), 2000);
           },
         },
       });
     } catch (err: any) {
       console.error("Signup error:", err);
-      setError(err?.message || "An unexpected error occurred");
+      if (err?.message?.toLowerCase().includes("email already exists")) {
+        toast.error("Account with this email already exists. Please try again.");
+      } else {
+        setError(err?.message || "An unexpected error occurred");
+      }
     } finally {
       setIsLoading(false);
     }

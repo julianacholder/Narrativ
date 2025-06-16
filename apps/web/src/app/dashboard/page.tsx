@@ -1,8 +1,6 @@
-// Updated Dashboard.tsx using the new category system
-
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +20,9 @@ import {
   Heart,
   MessageCircle,
   Globe,
-  FileText
+  FileText,
+  Menu,
+  X
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -63,9 +63,29 @@ const Dashboard = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Use the category hook - now you get all category functions
+  // Use the category hook
   const { getCategoryColor, getCategoryLabel } = useCategories();
+
+  // Close menus when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+        setShowMobileMenu(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -132,6 +152,8 @@ const Dashboard = () => {
       await authClient.signOut();
       toast.dismiss(loadingToast);
       toast.success('Signed out successfully');
+      setShowUserMenu(false);
+      setShowMobileMenu(false);
       router.push('/');
     } catch (error) {
       console.error('Error signing out:', error);
@@ -183,6 +205,10 @@ const Dashboard = () => {
     });
   };
 
+  const closeMobileMenu = () => {
+    setShowMobileMenu(false);
+  };
+
   const stats = [
     { 
       label: "Total Posts", 
@@ -227,178 +253,270 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Navigation */}
+      {/* Mobile-Responsive Navigation */}
       <nav className="border-b bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/" className="flex items-center space-x-2">
-            <PenTool className="h-8 w-8 text-indigo-600" />
-            <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              Narrativ
-            </span>
-          </Link>
-          
-          <div className="flex items-center space-x-4">
-            <Link href="/">
-              <Button variant="ghost" className="hover:text-indigo-600">
-                <Globe className="h-4 w-4 mr-2" />
-                View Public Blog
-              </Button>
-            </Link>
-            <Link href="/my-posts">
-              <Button variant="ghost" className="hover:text-indigo-600">
-                <FileText className="h-4 w-4 mr-2" />
-                My Posts
-              </Button>
-            </Link>
-            <Link href="/new-post">
-              <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
-                <Plus className="h-4 w-4 mr-2" />
-                New Post
-              </Button>
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            <Link href="/" className="flex items-center space-x-2">
+              <PenTool className="h-8 w-8 text-indigo-600" />
+              <span className="text-xl md:text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                Narrativ
+              </span>
             </Link>
             
-            <div className="relative">
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center space-x-4">
+              <Link href="/">
+                <Button variant="ghost" className="hover:text-indigo-600">
+                  <Globe className="h-4 w-4 mr-2" />
+                  View Public Blog
+                </Button>
+              </Link>
+              <Link href="/my-posts">
+                <Button variant="ghost" className="hover:text-indigo-600">
+                  <FileText className="h-4 w-4 mr-2" />
+                  My Blog
+                </Button>
+              </Link>
+              <Link href="/new-post">
+                <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Post
+                </Button>
+              </Link>
+              
+              {/* Desktop User Menu */}
+              <div className="relative" ref={userMenuRef}>
+                <Button
+                  variant="ghost"
+                  className="flex items-center space-x-2 hover:bg-indigo-50"
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
+                    <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium">{session.user.name}</span>
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+                
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border">
+                    <div className="px-4 py-2 border-b">
+                      <p className="text-sm font-medium text-gray-900">{session.user.name}</p>
+                      <p className="text-sm text-gray-500 truncate">{session.user.email}</p>
+                    </div>
+                    <Link href="/profile">
+                      <button 
+                        className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setShowUserMenu(false)}
+                      >
+                        <User className="h-4 w-4 mr-2" />
+                        Edit Profile
+                      </button>
+                    </Link>
+                    <button
+                      onClick={handleSignOut}
+                      className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Mobile Menu Button */}
+            <div className="md:hidden">
               <Button
                 variant="ghost"
-                className="flex items-center space-x-2 hover:bg-indigo-50"
-                onClick={() => setShowUserMenu(!showUserMenu)}
+                size="icon"
+                onClick={() => setShowMobileMenu(!showMobileMenu)}
+                className="hover:bg-indigo-50"
               >
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
-                  <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
-                </Avatar>
-                <ChevronDown className="h-4 w-4" />
+                {showMobileMenu ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
               </Button>
-              
-              {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border">
-                  <div className="px-4 py-2 border-b">
-                    <p className="text-sm font-medium text-gray-900">{session.user.name}</p>
-                    <p className="text-sm text-gray-500">{session.user.email}</p>
-                  </div>
-                  <Link href="/profile">
-                    <button className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                      <User className="h-4 w-4 mr-2" />
-                      Edit Profile
-                    </button>
-                  </Link>
-                  <button
-                    onClick={handleSignOut}
-                    className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                  >
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Sign Out
-                  </button>
-                </div>
-              )}
             </div>
           </div>
+
+          {/* Mobile Menu */}
+          {showMobileMenu && (
+            <div className="md:hidden mt-4 pb-4 border-t" ref={mobileMenuRef}>
+              <div className="flex flex-col space-y-2 pt-4">
+                {/* User Info */}
+                <div className="flex items-center space-x-3 px-3 py-2 bg-slate-50 rounded-lg mb-2">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
+                    <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium text-sm">{session.user.name}</p>
+                    <p className="text-xs text-gray-500">{session.user.email}</p>
+                  </div>
+                </div>
+
+                <Link href="/new-post">
+                  <Button 
+                    className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 mb-2"
+                    onClick={closeMobileMenu}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Post
+                  </Button>
+                </Link>
+
+                <Link href="/">
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-start hover:text-indigo-600"
+                    onClick={closeMobileMenu}
+                  >
+                    <Globe className="h-4 w-4 mr-2" />
+                    View Public Blog
+                  </Button>
+                </Link>
+
+                <Link href="/my-blog">
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-start hover:text-indigo-600"
+                    onClick={closeMobileMenu}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    My Blog
+                  </Button>
+                </Link>
+
+                <Link href="/profile">
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-start hover:text-indigo-600"
+                    onClick={closeMobileMenu}
+                  >
+                    <User className="h-4 w-4 mr-2" />
+                    Edit Profile
+                  </Button>
+                </Link>
+
+                <Button 
+                  variant="ghost" 
+                  className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={handleSignOut}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </nav>
 
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
             Welcome, {session.user.name}
           </h1>
           <p className="text-slate-600">Manage your blog posts and track your performance</p>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
           {stats.map((stat, index) => (
             <Card key={index} className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-0 shadow-md bg-white/80 backdrop-blur-sm">
-              <CardContent className="pt-6">
+              <CardContent className="pt-4 md:pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-2xl font-bold text-slate-800">{stat.value}</p>
-                    <p className="text-sm text-slate-600">{stat.label}</p>
+                    <p className="text-xl md:text-2xl font-bold text-slate-800">{stat.value}</p>
+                    <p className="text-xs md:text-sm text-slate-600">{stat.label}</p>
                   </div>
-                  <stat.icon className={`h-8 w-8 ${stat.color}`} />
+                  <stat.icon className={`h-6 w-6 md:h-8 md:w-8 ${stat.color}`} />
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="grid lg:grid-cols-3 gap-6 md:gap-8">
           {/* Recent Posts */}
-          <div className="lg:col-span-2 space-y-8">
+          <div className="lg:col-span-2 space-y-6 md:space-y-8">
             <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-xl">Recent Posts</CardTitle>
-                  <CardDescription>Manage your blog posts</CardDescription>
+                  <CardTitle className="text-lg md:text-xl">Recent Posts</CardTitle>
+                  <CardDescription className="text-sm">Manage your blog posts</CardDescription>
                 </div>
-                <Link href="/new-post">
+                <Link href="/new-post" className="hidden sm:block">
                   <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                     <Plus className="h-4 w-4 mr-2" />
                     New Post
                   </Button>
                 </Link>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+              <CardContent className="px-4 md:px-6">
+                <div className="space-y-3 md:space-y-4">
                   {posts.length > 0 ? posts.slice(0, 5).map((post) => (
-                    <div key={post.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-gradient-to-r from-slate-50 to-indigo-50">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-slate-800 mb-2">{post.title}</h3>
-                          <div className="flex items-center space-x-4 text-sm text-slate-600">
+                    <div key={post.id} className="border rounded-lg p-3 md:p-4 hover:shadow-md transition-shadow bg-gradient-to-r from-slate-50 to-indigo-50">
+                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-slate-800 mb-2 text-sm md:text-base line-clamp-2">{post.title}</h3>
+                          <div className="flex flex-wrap items-center gap-2 md:gap-4 text-xs md:text-sm text-slate-600">
                             <Badge 
                               variant={post.status === 'Published' ? 'default' : 'secondary'}
-                              className={post.status === 'Published' ? 'bg-green-100 text-green-800' : ''}
+                              className={`text-xs ${post.status === 'Published' ? 'bg-green-100 text-green-800' : ''}`}
                             >
                               {post.status}
                             </Badge>
-                            {/* Using the CategoryBadge component - much cleaner! */}
                             <CategoryBadge category={post.category} />
                             <span className="flex items-center">
-                              <Calendar className="h-4 w-4 mr-1" />
+                              <Calendar className="h-3 w-3 md:h-4 md:w-4 mr-1" />
                               {new Date(post.date).toLocaleDateString()}
                             </span>
+                          </div>
+                          <div className="flex items-center gap-3 md:gap-4 text-xs text-slate-500 mt-2">
                             <span className="flex items-center">
-                              <Eye className="h-4 w-4 mr-1" />
+                              <Eye className="h-3 w-3 mr-1" />
                               {post.views}
                             </span>
                             <span className="flex items-center">
-                              <MessageCircle className="h-4 w-4 mr-1" />
+                              <MessageCircle className="h-3 w-3 mr-1" />
                               {post.comments}
                             </span>
                             <span className="flex items-center">
-                              <Heart className="h-4 w-4 mr-1" />
+                              <Heart className="h-3 w-3 mr-1" />
                               {post.likes}
                             </span>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-1 md:space-x-2 flex-shrink-0">
                           <Link href={`/new-post?id=${post.id}`}>
-                            <Button variant="ghost" size="sm" className="hover:text-indigo-600">
-                              <Edit className="h-4 w-4" />
+                            <Button variant="ghost" size="sm" className="hover:text-indigo-600 h-8 w-8 md:h-9 md:w-9 p-0">
+                              <Edit className="h-3 w-3 md:h-4 md:w-4" />
                             </Button>
                           </Link>
                           <Link href={`/post/${post.id}`}>
-                            <Button variant="ghost" size="sm" className="hover:text-green-600">
-                              <Eye className="h-4 w-4" />
+                            <Button variant="ghost" size="sm" className="hover:text-green-600 h-8 w-8 md:h-9 md:w-9 p-0">
+                              <Eye className="h-3 w-3 md:h-4 md:w-4" />
                             </Button>
                           </Link>
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            className="hover:text-red-600"
+                            className="hover:text-red-600 h-8 w-8 md:h-9 md:w-9 p-0"
                             onClick={() => handleDeletePost(post.id)}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3 md:h-4 md:w-4" />
                           </Button>
                         </div>
                       </div>
                     </div>
                   )) : (
                     <div className="text-center py-8">
-                      <BookOpen className="h-16 w-16 text-slate-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-slate-600 mb-2">No posts yet</h3>
-                      <p className="text-slate-500 mb-4">Create your first blog post to get started</p>
+                      <BookOpen className="h-12 w-12 md:h-16 md:w-16 text-slate-400 mx-auto mb-4" />
+                      <h3 className="text-base md:text-lg font-semibold text-slate-600 mb-2">No posts yet</h3>
+                      <p className="text-sm md:text-base text-slate-500 mb-4">Create your first blog post to get started</p>
                       <Link href="/new-post">
                         <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                           <Plus className="h-4 w-4 mr-2" />
@@ -414,20 +532,20 @@ const Dashboard = () => {
             {/* Recent Activity */}
             <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="text-xl">Recent Activity</CardTitle>
-                <CardDescription>Comments, likes, and notifications on your posts</CardDescription>
+                <CardTitle className="text-lg md:text-xl">Recent Activity</CardTitle>
+                <CardDescription className="text-sm">Comments, likes, and notifications on your posts</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+              <CardContent className="px-4 md:px-6">
+                <div className="space-y-3 md:space-y-4">
                   {activities.length > 0 ? activities.slice(0, 8).map((activity) => (
                     <div key={activity.id} className={`flex items-start space-x-3 p-3 rounded-lg ${activity.isRead ? 'bg-slate-50' : 'bg-indigo-50'}`}>
                       <div className="flex-shrink-0">
-                        {activity.type === 'comment' && <MessageCircle className="h-5 w-5 text-blue-600" />}
-                        {activity.type === 'like' && <Heart className="h-5 w-5 text-red-600" />}
-                        {activity.type === 'post' && <BookOpen className="h-5 w-5 text-green-600" />}
+                        {activity.type === 'comment' && <MessageCircle className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />}
+                        {activity.type === 'like' && <Heart className="h-4 w-4 md:h-5 md:w-5 text-red-600" />}
+                        {activity.type === 'post' && <BookOpen className="h-4 w-4 md:h-5 md:w-5 text-green-600" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-slate-800">
+                        <p className="text-xs md:text-sm text-slate-800">
                           {activity.message}
                           <span className="font-medium"> "{activity.postTitle}"</span>
                           {activity.author && <span className="text-slate-600"> by {activity.author}</span>}
@@ -442,9 +560,9 @@ const Dashboard = () => {
                     </div>
                   )) : (
                     <div className="text-center py-8">
-                      <MessageCircle className="h-16 w-16 text-slate-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-slate-600 mb-2">No activity yet</h3>
-                      <p className="text-slate-500">Activity will appear here when people interact with your posts</p>
+                      <MessageCircle className="h-12 w-12 md:h-16 md:w-16 text-slate-400 mx-auto mb-4" />
+                      <h3 className="text-base md:text-lg font-semibold text-slate-600 mb-2">No activity yet</h3>
+                      <p className="text-sm md:text-base text-slate-500">Activity will appear here when people interact with your posts</p>
                     </div>
                   )}
                 </div>
@@ -453,33 +571,33 @@ const Dashboard = () => {
           </div>
 
           {/* Analytics Sidebar */}
-          <div className="space-y-6">
-            {/* Using the CategoryStats component - super clean! */}
+          <div className="space-y-4 md:space-y-6">
+            {/* Using the CategoryStats component */}
             <CategoryStats posts={posts} />
 
             {/* Quick Actions */}
             <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-                <CardDescription>Common tasks</CardDescription>
+                <CardTitle className="text-lg">Quick Actions</CardTitle>
+                <CardDescription className="text-sm">Common tasks</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <Link href="/new-post">
-                  <Button variant="outline" className="w-full justify-start hover:bg-indigo-50">
+                  <Button variant="outline" className="w-full justify-start hover:bg-indigo-50 text-sm">
                     <Plus className="h-4 w-4 mr-2" />
                     Create New Post
                   </Button>
                 </Link>
                 <Link href="/">
-                  <Button variant="outline" className="w-full justify-start hover:bg-green-50">
+                  <Button variant="outline" className="w-full justify-start hover:bg-green-50 text-sm">
                     <Globe className="h-4 w-4 mr-2" />
                     View Public Blog
                   </Button>
                 </Link>
                 <Link href="/my-posts">
-                  <Button variant="outline" className="w-full justify-start hover:bg-purple-50">
+                  <Button variant="outline" className="w-full justify-start hover:bg-purple-50 text-sm">
                     <FileText className="h-4 w-4 mr-2" />
-                    Manage All Posts
+                    My Blog
                   </Button>
                 </Link>
               </CardContent>

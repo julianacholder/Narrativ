@@ -23,7 +23,9 @@ import {
   LayoutDashboard,
   LogOut,
   ChevronDown,
-  BookOpen
+  BookOpen,
+  Menu,
+  X
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -83,17 +85,22 @@ export default function PostPage() {
   const [replyContent, setReplyContent] = useState("");
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   // Get session data
   const { data: session, isPending } = authClient.useSession();
   const isAuthenticated = !!session?.user;
 
-  // Close user menu when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setShowUserMenu(false);
+      }
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+        setShowMobileMenu(false);
       }
     }
 
@@ -140,6 +147,7 @@ export default function PostPage() {
     try {
       await authClient.signOut();
       setShowUserMenu(false);
+      setShowMobileMenu(false);
       window.location.reload();
     } catch (error) {
       console.error('Error signing out:', error);
@@ -149,20 +157,24 @@ export default function PostPage() {
   const handleLikePost = async () => {
     if (!post) return;
     
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !session?.user?.id) {
       setShowAuthPrompt(true);
       return;
     }
 
     try {
-      const response = await fetch(`/api/posts/${postId}/like`, {
+      // Include userId in URL like other endpoints
+      const response = await fetch(`/api/posts/${postId}/like?userId=${session.user.id}`, {
         method: 'POST',
+        credentials: 'include',
       });
+      
       if (response.ok) {
+        const data = await response.json();
         setPost(prev => prev ? {
           ...prev,
-          likes: prev.isLiked ? prev.likes - 1 : prev.likes + 1,
-          isLiked: !prev.isLiked
+          likes: data.totalLikes,
+          isLiked: data.isLiked
         } : null);
       }
     } catch (error) {
@@ -174,69 +186,117 @@ export default function PostPage() {
     e.preventDefault();
     if (!newComment.trim()) return;
 
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !session?.user?.id) {
       setShowAuthPrompt(true);
       return;
     }
 
     try {
-      const response = await fetch(`/api/posts/${postId}/comments`, {
+      console.log('🚀 Submitting comment...');
+      
+      const response = await fetch(`/api/posts/${postId}/comments?userId=${session.user.id}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ content: newComment }),
       });
 
-      if (response.ok) {
-        const newCommentData = await response.json();
-        setComments(prev => [newCommentData, ...prev]);
-        setNewComment("");
+      console.log('📥 Comment response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Comment submission failed:', errorData);
+        
+        if (response.status === 401 || response.status === 403) {
+          setShowAuthPrompt(true);
+          return;
+        }
+        
+        throw new Error(errorData.error || 'Failed to post comment');
       }
+
+      const newCommentData = await response.json();
+      console.log('✅ Comment created successfully:', newCommentData);
+      
+      setComments(prev => [newCommentData, ...prev]);
+      setNewComment("");
     } catch (error) {
-      console.error('Error posting comment:', error);
+      console.error('💥 Error posting comment:', error);
+      alert('Failed to post comment. Please try again.');
     }
   };
 
   const handleReplySubmit = async (parentId: string) => {
     if (!replyContent.trim()) return;
 
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !session?.user?.id) {
       setShowAuthPrompt(true);
       return;
     }
 
     try {
-      const response = await fetch(`/api/posts/${postId}/comments`, {
+      console.log('🚀 Submitting reply...');
+      
+      const response = await fetch(`/api/posts/${postId}/comments?userId=${session.user.id}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ content: replyContent, parentId }),
       });
 
-      if (response.ok) {
-        const newReply = await response.json();
-        setComments(prev => prev.map(comment => 
-          comment.id === parentId 
-            ? { ...comment, replies: [...(comment.replies || []), newReply] }
-            : comment
-        ));
-        setReplyContent("");
-        setReplyingTo(null);
+      console.log('📥 Reply response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Reply submission failed:', errorData);
+        
+        if (response.status === 401 || response.status === 403) {
+          setShowAuthPrompt(true);
+          return;
+        }
+        
+        throw new Error(errorData.error || 'Failed to post reply');
       }
+
+      const newReply = await response.json();
+      console.log('✅ Reply created successfully:', newReply);
+      
+      setComments(prev => prev.map(comment => 
+        comment.id === parentId 
+          ? { ...comment, replies: [...(comment.replies || []), newReply] }
+          : comment
+      ));
+      setReplyContent("");
+      setReplyingTo(null);
     } catch (error) {
-      console.error('Error posting reply:', error);
+      console.error('💥 Error posting reply:', error);
+      alert('Failed to post reply. Please try again.');
     }
   };
 
-  const handleCommentLike = (commentId: string) => {
-    if (!isAuthenticated) {
-      setShowAuthPrompt(true);
-      return;
+  const handleCommentLike = async (commentId: string) => {
+  if (!isAuthenticated || !session?.user?.id) {
+    setShowAuthPrompt(true);
+    return;
+  }
+
+  // Just toggle the like state locally - no API call needed
+  setComments(prev => prev.map(comment => {
+    if (comment.id === commentId) {
+      const newIsLiked = !comment.isLiked;
+      return {
+        ...comment,
+        isLiked: newIsLiked,
+        likes: newIsLiked ? comment.likes + 1 : comment.likes - 1
+      };
     }
-    // Handle comment like logic here
-  };
+    return comment;
+  }));
+};
 
   const handleReplyClick = (commentId: string) => {
     if (!isAuthenticated) {
@@ -256,6 +316,10 @@ export default function PostPage() {
       "Personal": "bg-pink-100 text-pink-700"
     };
     return colors[category] || "bg-gray-100 text-gray-700";
+  };
+
+  const closeMobileMenu = () => {
+    setShowMobileMenu(false);
   };
 
   if (loading || isPending) {
@@ -287,121 +351,237 @@ export default function PostPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Navigation - Conditional based on login status */}
+      {/* Mobile-Responsive Navigation */}
       <nav className="border-b bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/" className="flex items-center space-x-2">
-            <PenTool className="h-8 w-8 text-indigo-600" />
-            <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              Narrativ
-            </span>
-          </Link>
-          
-          <div className="flex items-center space-x-4">
-            <Link href="/">
-              <Button variant="ghost" className="hover:text-indigo-600">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Stories
-              </Button>
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            <Link href="/" className="flex items-center space-x-2">
+              <PenTool className="h-8 w-8 text-indigo-600" />
+              <span className="text-xl md:text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                Narrativ
+              </span>
             </Link>
+            
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center space-x-4">
+              <Link href="/">
+                <Button variant="ghost" className="hover:text-indigo-600">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Stories
+                </Button>
+              </Link>
 
-            {session?.user ? (
-              // Logged in user navigation
-              <>
-                <Link href="/dashboard">
-                  <Button variant="ghost" className="hover:text-indigo-600">
-                    <LayoutDashboard className="h-4 w-4 mr-2" />
-                    Dashboard
-                  </Button>
-                </Link>
-                <Link href="/new-post">
-                  <Button variant="ghost" className="hover:text-indigo-600">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Write
-                  </Button>
-                </Link>
-                
-                {/* User Menu */}
-                <div className="relative" ref={userMenuRef}>
-                  <Button
-                    variant="ghost"
-                    className="flex items-center space-x-2 hover:bg-indigo-50"
-                    onClick={() => setShowUserMenu(!showUserMenu)}
-                  >
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
-                      <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
-                    </Avatar>
-                    <span className="hidden md:block text-sm font-medium">{session.user.name}</span>
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
+              {session?.user ? (
+                <>
+                  <Link href="/dashboard">
+                    <Button variant="ghost" className="hover:text-indigo-600">
+                      <LayoutDashboard className="h-4 w-4 mr-2" />
+                      Dashboard
+                    </Button>
+                  </Link>
+                  <Link href="/new-post">
+                    <Button variant="ghost" className="hover:text-indigo-600">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Write
+                    </Button>
+                  </Link>
                   
-                  {showUserMenu && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border">
-                      <div className="px-4 py-2 border-b">
-                        <p className="text-sm font-medium text-gray-900">{session.user.name}</p>
-                        <p className="text-sm text-gray-500 truncate">{session.user.email}</p>
+                  {/* Desktop User Menu */}
+                  <div className="relative" ref={userMenuRef}>
+                    <Button
+                      variant="ghost"
+                      className="flex items-center space-x-2 hover:bg-indigo-50"
+                      onClick={() => setShowUserMenu(!showUserMenu)}
+                    >
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
+                        <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm font-medium">{session.user.name}</span>
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                    
+                    {showUserMenu && (
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border">
+                        <div className="px-4 py-2 border-b">
+                          <p className="text-sm font-medium text-gray-900">{session.user.name}</p>
+                          <p className="text-sm text-gray-500 truncate">{session.user.email}</p>
+                        </div>
+                        <Link href="/dashboard">
+                          <button 
+                            className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            onClick={() => setShowUserMenu(false)}
+                          >
+                            <LayoutDashboard className="h-4 w-4 mr-2" />
+                            Dashboard
+                          </button>
+                        </Link>
+                        <Link href="/my-blog">
+                          <button 
+                            className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            onClick={() => setShowUserMenu(false)}
+                          >
+                            <BookOpen className="h-4 w-4 mr-2" />
+                            My Blog
+                          </button>
+                        </Link>
+                        <Link href="/profile">
+                          <button 
+                            className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            onClick={() => setShowUserMenu(false)}
+                          >
+                            <User className="h-4 w-4 mr-2" />
+                            Profile
+                          </button>
+                        </Link>
+                        <hr className="my-1" />
+                        <button
+                          onClick={handleSignOut}
+                          className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                        >
+                          <LogOut className="h-4 w-4 mr-2" />
+                          Sign Out
+                        </button>
                       </div>
-                      <Link href="/dashboard">
-                        <button 
-                          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          onClick={() => setShowUserMenu(false)}
-                        >
-                          <LayoutDashboard className="h-4 w-4 mr-2" />
-                          Dashboard
-                        </button>
-                      </Link>
-                      <Link href="/my-blog">
-                        <button 
-                          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          onClick={() => setShowUserMenu(false)}
-                        >
-                          <BookOpen className="h-4 w-4 mr-2" />
-                          My Blog
-                        </button>
-                      </Link>
-                      <Link href="/profile">
-                        <button 
-                          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          onClick={() => setShowUserMenu(false)}
-                        >
-                          <User className="h-4 w-4 mr-2" />
-                          Profile
-                        </button>
-                      </Link>
-                      <hr className="my-1" />
-                      <button
-                        onClick={handleSignOut}
-                        className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                      >
-                        <LogOut className="h-4 w-4 mr-2" />
-                        Sign Out
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              // Guest user navigation
-              <>
-                <Link href="/login">
-                  <Button variant="ghost" className="hover:text-indigo-600">Login</Button>
-                </Link>
-                <Link href="/signup">
-                  <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700">
-                    Sign Up
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Link href="/login">
+                    <Button variant="ghost" className="hover:text-indigo-600">Login</Button>
+                  </Link>
+                  <Link href="/signup">
+                    <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700">
+                      Sign Up
+                    </Button>
+                  </Link>
+                </>
+              )}
+            </div>
+
+            {/* Mobile Menu Button */}
+            <div className="md:hidden">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowMobileMenu(!showMobileMenu)}
+                className="hover:bg-indigo-50"
+              >
+                {showMobileMenu ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              </Button>
+            </div>
+          </div>
+
+          {/* Mobile Menu */}
+          {showMobileMenu && (
+            <div className="md:hidden mt-4 pb-4 border-t" ref={mobileMenuRef}>
+              <div className="flex flex-col space-y-2 pt-4">
+                <Link href="/">
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-start hover:text-indigo-600"
+                    onClick={closeMobileMenu}
+                  >
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Back to Stories
                   </Button>
                 </Link>
-              </>
-            )}
-          </div>
+
+                {session?.user ? (
+                  <>
+                    {/* User Info */}
+                    <div className="flex items-center space-x-3 px-3 py-2 bg-slate-50 rounded-lg">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
+                        <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-sm">{session.user.name}</p>
+                        <p className="text-xs text-gray-500">{session.user.email}</p>
+                      </div>
+                    </div>
+
+                    <Link href="/dashboard">
+                      <Button 
+                        variant="ghost" 
+                        className="w-full justify-start hover:text-indigo-600"
+                        onClick={closeMobileMenu}
+                      >
+                        <LayoutDashboard className="h-4 w-4 mr-2" />
+                        Dashboard
+                      </Button>
+                    </Link>
+                    <Link href="/new-post">
+                      <Button 
+                        variant="ghost" 
+                        className="w-full justify-start hover:text-indigo-600"
+                        onClick={closeMobileMenu}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Write
+                      </Button>
+                    </Link>
+                    <Link href="/my-blog">
+                      <Button 
+                        variant="ghost" 
+                        className="w-full justify-start hover:text-indigo-600"
+                        onClick={closeMobileMenu}
+                      >
+                        <BookOpen className="h-4 w-4 mr-2" />
+                        My Blog
+                      </Button>
+                    </Link>
+                    <Link href="/profile">
+                      <Button 
+                        variant="ghost" 
+                        className="w-full justify-start hover:text-indigo-600"
+                        onClick={closeMobileMenu}
+                      >
+                        <User className="h-4 w-4 mr-2" />
+                        Profile
+                      </Button>
+                    </Link>
+                    <Button 
+                      variant="ghost" 
+                      className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={handleSignOut}
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/login">
+                      <Button 
+                        variant="ghost" 
+                        className="w-full justify-start hover:text-indigo-600"
+                        onClick={closeMobileMenu}
+                      >
+                        Login
+                      </Button>
+                    </Link>
+                    <Link href="/signup">
+                      <Button 
+                        className="w-full bg-gradient-to-r from-indigo-600 to-purple-600"
+                        onClick={closeMobileMenu}
+                      >
+                        Sign Up
+                      </Button>
+                    </Link>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </nav>
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Post Header */}
         <div className="mb-8">
-          <div className="flex items-center space-x-4 mb-4">
+          <div className="flex items-center space-x-4 mb-4 flex-wrap">
             <Badge className={`${getCategoryColor(post.category)} border-0`}>
               {post.category}
             </Badge>
@@ -412,11 +592,11 @@ export default function PostPage() {
             ))}
           </div>
 
-          <h1 className="text-4xl md:text-5xl font-bold leading-tight bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-6">
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-6">
             {post.title}
           </h1>
 
-          <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div className="flex items-center space-x-4">
               <Avatar className="h-12 w-12">
                 <AvatarImage src={post.author.avatar} alt={post.author.name} />
@@ -459,14 +639,14 @@ export default function PostPage() {
           <img 
             src={post.image} 
             alt={post.title}
-            className="w-full h-64 md:h-96 object-cover"
+            className="w-full h-48 md:h-64 lg:h-96 object-cover"
           />
         </div>
 
         {/* Post Content */}
         <Card className="mb-8 border-0 shadow-lg bg-white/80 backdrop-blur-sm">
-          <CardContent className="p-8">
-            <div className="prose prose-lg max-w-none">
+          <CardContent className="p-4 md:p-8">
+            <div className="prose prose-sm md:prose-lg max-w-none">
               <div dangerouslySetInnerHTML={{ __html: post.content }} />
             </div>
           </CardContent>
@@ -549,15 +729,21 @@ export default function PostPage() {
                         <p className="text-slate-700">{comment.content}</p>
                       </div>
                       <div className="flex items-center space-x-4 text-sm">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-auto p-0 text-slate-500 hover:text-red-600"
-                          onClick={() => handleCommentLike(comment.id)}
-                        >
-                          <ThumbsUp className="h-4 w-4 mr-1" />
-                          {comment.likes}
-                        </Button>
+                       <Button 
+  variant="ghost" 
+  size="sm" 
+  className={`h-auto p-0 transition-colors ${
+    comment.isLiked 
+      ? 'text-red-600 hover:text-red-700' 
+      : 'text-slate-500 hover:text-red-600'
+  }`}
+  onClick={() => handleCommentLike(comment.id)}
+>
+  <ThumbsUp className={`h-3 w-3 md:h-4 md:w-4 mr-1 transition-colors ${
+    comment.isLiked ? 'fill-red-600' : ''
+  }`} />
+  {comment.likes}
+</Button>
                         <Button 
                           variant="ghost" 
                           size="sm" 

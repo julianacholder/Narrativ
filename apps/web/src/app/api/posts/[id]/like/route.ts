@@ -3,25 +3,21 @@ import { postLikes } from '@server/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { nanoid } from 'nanoid';
-import { auth } from '@server/lib/auth'; 
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Get the current session
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
-
-    // Check if user is authenticated
-    if (!session?.user?.id) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    // Get userId from URL parameters (like your other endpoints)
+    const url = new URL(request.url);
+    const userId = url.searchParams.get('userId');
+    
+    if (!userId) {
+      return Response.json({ error: 'UserId parameter required' }, { status: 400 });
     }
 
     const { id: postId } = await params;
-    const userId = session.user.id;
 
     // Check if already liked
     const [existingLike] = await db
@@ -30,13 +26,16 @@ export async function POST(
       .where(and(eq(postLikes.postId, postId), eq(postLikes.userId, userId)))
       .limit(1);
 
+    let isLiked = false;
+
     if (existingLike) {
       // Unlike
       await db
         .delete(postLikes)
         .where(and(eq(postLikes.postId, postId), eq(postLikes.userId, userId)));
+      isLiked = false;
     } else {
-      // Like - need to provide ID
+      // Like
       await db
         .insert(postLikes)
         .values({
@@ -45,9 +44,20 @@ export async function POST(
           userId,
           createdAt: new Date(),
         });
+      isLiked = true;
     }
 
-    return Response.json({ success: true });
+    // Get total like count
+    const totalLikes = await db
+      .select()
+      .from(postLikes)
+      .where(eq(postLikes.postId, postId));
+
+    return Response.json({ 
+      success: true, 
+      isLiked,
+      totalLikes: totalLikes.length 
+    });
   } catch (error) {
     console.error('Error toggling like:', error);
     return Response.json({ error: 'Failed to toggle like' }, { status: 500 });

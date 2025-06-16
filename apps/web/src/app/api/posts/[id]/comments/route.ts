@@ -12,27 +12,18 @@ export async function GET(
   try {
     const { id: postId } = await params;
 
-    console.log('Fetching comments for postId:', postId); // Debug log
-
-    // Get top-level comments (parentId is null)
     const topLevelComments = await db
       .select({
         id: comments.id,
         content: comments.content,
         createdAt: comments.createdAt,
-        author: {
-          name: user.name,
-          avatar: user.image,
-        },
+        author: { name: user.name, avatar: user.image },
       })
       .from(comments)
       .leftJoin(user, eq(comments.authorId, user.id))
       .where(and(eq(comments.postId, postId), isNull(comments.parentId)))
       .orderBy(desc(comments.createdAt));
 
-    console.log('Found top-level comments:', topLevelComments.length); // Debug log
-
-    // Get all replies for these comments
     const commentsWithReplies = await Promise.all(
       topLevelComments.map(async (comment) => {
         const replies = await db
@@ -40,10 +31,7 @@ export async function GET(
             id: comments.id,
             content: comments.content,
             createdAt: comments.createdAt,
-            author: {
-              name: user.name,
-              avatar: user.image,
-            },
+            author: { name: user.name, avatar: user.image },
           })
           .from(comments)
           .leftJoin(user, eq(comments.authorId, user.id))
@@ -77,61 +65,61 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    // Get userId from URL parameters (like your other endpoints)
+    const url = new URL(request.url);
+    const userId = url.searchParams.get('userId');
+    
+    console.log('🔍 UserId from URL:', userId);
+    
+    if (!userId) {
+      return Response.json({ error: 'UserId parameter required' }, { status: 400 });
+    }
 
-    if (!session?.user?.id) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    // Optional: Still check session for additional security
+    const session = await auth.api.getSession({ headers: request.headers });
+    console.log('🔐 Session check:', { hasSession: !!session?.user, sessionUserId: session?.user?.id });
+    
+    // Verify the userId matches the session user (if session exists)
+    if (session?.user?.id && session.user.id !== userId) {
+      return Response.json({ error: 'User ID mismatch' }, { status: 403 });
     }
 
     const { id: postId } = await params;
-    const { content, parentId } = await request.json(); // parentId for replies
-    const userId = session.user.id;
-
-    console.log('Creating comment for postId:', postId, 'parentId:', parentId); // Debug log
+    const { content, parentId } = await request.json();
+    
+    if (!content?.trim()) {
+      return Response.json({ error: 'Comment content required' }, { status: 400 });
+    }
 
     const commentId = nanoid();
 
-    const [newComment] = await db
-      .insert(comments)
-      .values({
-        id: commentId,
-        postId,
-        authorId: userId,
-        content,
-        parentId: parentId || null, // null for top-level comments, parentId for replies
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
+    await db.insert(comments).values({
+      id: commentId,
+      postId,
+      authorId: userId, // Use the userId from URL parameter
+      content: content.trim(),
+      parentId: parentId || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
-    // Get the author info for the response
     const [commentWithAuthor] = await db
       .select({
         id: comments.id,
         content: comments.content,
         createdAt: comments.createdAt,
-        author: {
-          name: user.name,
-          avatar: user.image,
-        },
+        author: { name: user.name, avatar: user.image },
       })
       .from(comments)
       .leftJoin(user, eq(comments.authorId, user.id))
-      .where(eq(comments.id, commentId))
-      .limit(1);
+      .where(eq(comments.id, commentId));
 
-    const responseData = {
+    return Response.json({
       ...commentWithAuthor,
       date: commentWithAuthor.createdAt?.toISOString() || new Date().toISOString(),
       likes: 0,
       isLiked: false,
-    };
-
-    console.log('Created comment:', responseData); // Debug log
-
-    return Response.json(responseData);
+    });
   } catch (error) {
     console.error('Error creating comment:', error);
     return Response.json({ error: 'Failed to create comment' }, { status: 500 });
