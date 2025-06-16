@@ -88,80 +88,81 @@ const Dashboard = () => {
   }, []);
 
   useEffect(() => {
-    async function fetchDashboardData() {
-      if (!session?.user) {
-        console.log('❌ No session or user in frontend');
+  async function fetchDashboardData() {
+    if (!session?.user) {
+      console.log('❌ No session or user in frontend');
+      return;
+    }
+    
+    try {
+      const userId = session.user.id;
+      console.log('🚀 Starting fetch for userId:', userId);
+      
+      if (!userId) {
+        console.error('❌ No userId found in session');
+        setLoading(false);
         return;
       }
       
-      try {
-        const userId = session.user.id;
-        console.log('🚀 Starting fetch for userId:', userId);
-        
-        if (!userId) {
-          console.error('❌ No userId found in session');
-          setLoading(false);
-          return;
+      console.log('📡 Fetching posts...');
+      const postsResponse = await fetch(`/api/users/posts?userId=${userId}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
         }
-        
-        console.log('📡 Fetching posts...');
-        const postsResponse = await fetch(`/api/users/posts?userId=${userId}`, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        });
+      });
 
-        console.log('📊 Posts response status:', postsResponse.status, postsResponse.statusText);
+      console.log('📊 Posts response status:', postsResponse.status, postsResponse.statusText);
 
-        if (postsResponse.ok) {
-          const postsData = await postsResponse.json();
-          console.log('✅ Posts data received:', postsData.length, 'posts');
-          setPosts(postsData);
-        } else {
-          const errorText = await postsResponse.text();
-          console.error('❌ Failed to fetch posts:', postsResponse.status, errorText);
-          toast.error('Failed to load posts');
-        }
-
-        console.log('📡 Fetching activities...');
-        const activitiesResponse = await fetch(`/api/users/activities?userId=${userId}`, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        });
-        
-        console.log('🔔 Activities response status:', activitiesResponse.status, activitiesResponse.statusText);
-        
-        if (activitiesResponse.ok) {
-          const activitiesData = await activitiesResponse.json();
-          console.log('✅ Activities data received:', activitiesData.length, 'activities');
-          setActivities(activitiesData);
-        } else {
-          console.error('❌ Failed to fetch activities:', activitiesResponse.status);
-        }
-
-      } catch (error) {
-        console.error('💥 Error fetching dashboard data:', error);
-      } finally {
-        console.log('🏁 Setting loading to false');
-        setLoading(false);
+      if (postsResponse.ok) {
+        const postsData = await postsResponse.json();
+        console.log('✅ Posts data received:', postsData);
+        setPosts(postsData);
+      } else {
+        const errorText = await postsResponse.text();
+        console.error('❌ Failed to fetch posts:', errorText);
+        toast.error('Failed to load posts');
       }
-    }
 
-    if (session?.user) {
-      console.log('✅ Session found, starting data fetch');
-      fetchDashboardData();
-    } else if (!isPending) {
-      console.log('⏭️ No session and not pending, setting loading to false');
+      console.log('📡 Fetching activities...');
+      const activitiesResponse = await fetch(`/api/users/activities?userId=${userId}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      console.log('🔔 Activities response status:', activitiesResponse.status, activitiesResponse.statusText);
+      
+      if (activitiesResponse.ok) {
+        const activitiesData = await activitiesResponse.json();
+        console.log('✅ Activities data received:', activitiesData);
+        setActivities(activitiesData);
+      } else {
+        console.error('❌ Failed to fetch activities:', activitiesResponse.status);
+      }
+
+    } catch (error) {
+      console.error('💥 Error fetching dashboard data:', error);
+    } finally {
+      console.log('🏁 Setting loading to false');
       setLoading(false);
-    } else {
-      console.log('⏳ Still pending...');
     }
-  }, [session, isPending]);
+  }
+
+  if (session?.user) {
+    console.log('✅ Session found, starting data fetch');
+    fetchDashboardData();
+  } else if (!isPending) {
+    // ✅ CRITICAL FIX: Handle the case when there's no session and we're not loading
+    console.log('⏭️ No session and not pending, setting loading to false');
+    setLoading(false);
+  } else {
+    console.log('⏳ Still pending...');
+  }
+}, [session, isPending]); // ✅ IMPORTANT: Include isPending in dependencies
 
   const handleSignOut = async () => {
     try {
