@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { authClient } from "@/lib/auth-client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Save, Eye, Upload, Image as ImageIcon } from "lucide-react";
@@ -11,16 +11,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import dynamicImport from 'next/dynamic';
+import dynamic from 'next/dynamic';
 
-// Use a React 18 compatible editor
-const MDEditor = dynamicImport(() => import('@uiw/react-md-editor').then(mod => ({ default: mod.default })), { 
-  ssr: false 
+// Properly configure dynamic import for MDEditor
+const MDEditor = dynamic(() => import('@uiw/react-md-editor'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-96 border border-slate-200 rounded-xl flex items-center justify-center">
+      <div className="text-slate-500">Loading editor...</div>
+    </div>
+  )
 });
-import '@uiw/react-md-editor/markdown-editor.css';
-
-// Force dynamic rendering to prevent prerendering issues
-export const dynamic = 'force-dynamic';
 
 // Types - Updated to match your database schema
 interface BlogPost {
@@ -32,10 +33,9 @@ interface BlogPost {
   authorId: string;
   image: string | null;
   readTime: string;
-  published: boolean; // This is the actual field in your schema (not 'status')
+  published: boolean;
   createdAt: Date | null;
   updatedAt: Date | null;
-  // Note: slug and tags are not in your schema, so removed
 }
 
 interface FormData {
@@ -43,9 +43,8 @@ interface FormData {
   content: string;
   excerpt: string;
   category: string;
-  status: 'draft' | 'published'; // Keep this for the form UI
+  status: 'draft' | 'published';
   image: string;
-  // Removed tags and slug since they're not in your database schema
 }
 
 interface Category {
@@ -63,12 +62,14 @@ const CATEGORIES: Category[] = [
   { value: "personal", label: "Personal", color: "bg-gray-100 text-gray-800" }
 ];
 
-export default function Editor() {
+// Separate component to handle search params
+function EditorContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
+  const [isClient, setIsClient] = useState(false);
   
   const [formData, setFormData] = useState<FormData>({
     title: "",
@@ -76,22 +77,27 @@ export default function Editor() {
     excerpt: "",
     category: "",
     status: "draft",
-    image: "", // Changed from featured_image to image
-  
-  
+    image: "",
   });
-  const { data: session } = authClient.useSession();
+
+  const { data: session, isPending } = authClient.useSession();
+
+  // Ensure we're on the client side
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   useEffect(() => {
+    if (!isClient) return;
+    
     const postId = searchParams.get('id');
     if (postId) {
       loadPost(postId);
     }
-  }, [searchParams]);
+  }, [searchParams, isClient]);
 
   const loadPost = async (postId: string): Promise<void> => {
     try {
-      // Replace with your actual API call
       const response = await fetch(`/api/posts/${postId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch post');
@@ -106,25 +112,14 @@ export default function Editor() {
           content: post.content || "",
           excerpt: post.excerpt || "",
           category: post.category || "",
-          status: post.published ? 'published' : 'draft', // Use published field to set statu
-          image: post.image || "", // Changed from featured_image to image
-         
+          status: post.published ? 'published' : 'draft',
+          image: post.image || "",
         });
       }
     } catch (error) {
       console.error("Error loading post:", error);
     }
   };
-
-  // Remove generateSlug function since we're not using slugs
-  // const generateSlug = (title: string): string => {
-  //   return title
-  //     .toLowerCase()
-  //     .replace(/[^a-z0-9 -]/g, '')
-  //     .replace(/\s+/g, '-')
-  //     .replace(/-+/g, '-')
-  //     .trim();
-  // };
 
   const calculateReadTime = (content: string): number => {
     const wordsPerMinute = 200;
@@ -146,7 +141,6 @@ export default function Editor() {
       const formData = new FormData();
       formData.append('file', file);
       
-      // Replace with your actual upload API
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
@@ -157,7 +151,7 @@ export default function Editor() {
       }
       
       const { file_url }: { file_url: string } = await response.json();
-      setFormData(prev => ({ ...prev, image: file_url })); // Changed from featured_image to image
+      setFormData(prev => ({ ...prev, image: file_url }));
     } catch (error) {
       console.error("Error uploading image:", error);
     }
@@ -165,74 +159,70 @@ export default function Editor() {
   };
 
   const handleSave = async (status: 'draft' | 'published' = 'draft'): Promise<void> => {
-  if (!formData.title.trim() || !formData.content.trim() || !formData.category) {
-    alert('Please fill in all required fields (title, content, and category)');
-    return;
-  }
-
-  // Check if user is authenticated
-  if (!session?.user?.id) {
-    alert('You must be logged in to save posts');
-    return;
-  }
-
-  setIsLoading(true);
-  try {
-    const userId = session.user.id; // Get userId from session
-    
-    const postData = {
-      title: formData.title.trim(),
-      content: formData.content,
-      excerpt: formData.excerpt || formData.content.replace(/<[^>]*>/g, '').substring(0, 160) + '...',
-      category: formData.category,
-      image: formData.image || null,
-      status,
-      readTime: calculateReadTime(formData.content) + ' min read',
-    };
-
-    let response: Response;
-    
-    if (editingPost) {
-      // Update existing post - ADD userId parameter
-      console.log('📝 Updating post:', editingPost.id);
-      response = await fetch(`/api/posts/${editingPost.id}/edit?userId=${userId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(postData),
-      });
-    } else {
-      // Create new post - ADD userId parameter
-      console.log('📝 Creating new post');
-      response = await fetch(`/api/posts/create?userId=${userId}`, { 
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(postData),
-      });
+    if (!formData.title.trim() || !formData.content.trim() || !formData.category) {
+      alert('Please fill in all required fields (title, content, and category)');
+      return;
     }
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to save post');
+    if (!session?.user?.id) {
+      alert('You must be logged in to save posts');
+      return;
     }
 
-    const savedPost = await response.json();
-    console.log('✅ Post saved successfully:', savedPost);
+    setIsLoading(true);
+    try {
+      const userId = session.user.id;
+      
+      const postData = {
+        title: formData.title.trim(),
+        content: formData.content,
+        excerpt: formData.excerpt || formData.content.replace(/<[^>]*>/g, '').substring(0, 160) + '...',
+        category: formData.category,
+        image: formData.image || null,
+        status,
+        readTime: calculateReadTime(formData.content) + ' min read',
+      };
 
-    // Redirect to dashboard
-    router.push('/dashboard');
-    
-  } catch (error) {
-    console.error('❌ Error saving post:', error);
-    alert('Failed to save post. Please try again.');
-  }
-  setIsLoading(false);
-};
+      let response: Response;
+      
+      if (editingPost) {
+        console.log('📝 Updating post:', editingPost.id);
+        response = await fetch(`/api/posts/${editingPost.id}/edit?userId=${userId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(postData),
+        });
+      } else {
+        console.log('📝 Creating new post');
+        response = await fetch(`/api/posts/create?userId=${userId}`, { 
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(postData),
+        });
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save post');
+      }
+
+      const savedPost = await response.json();
+      console.log('✅ Post saved successfully:', savedPost);
+
+      router.push('/dashboard');
+      
+    } catch (error) {
+      console.error('❌ Error saving post:', error);
+      alert('Failed to save post. Please try again.');
+    }
+    setIsLoading(false);
+  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0];
@@ -241,17 +231,17 @@ export default function Editor() {
     }
   };
 
-  // No longer needed with MDEditor
-  // const quillModules = {
-  //   toolbar: [
-  //     [{ 'header': [1, 2, 3, false] }],
-  //     ['bold', 'italic', 'underline', 'strike'],
-  //     [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-  //     ['blockquote', 'code-block'],
-  //     ['link', 'image'],
-  //     ['clean']
-  //   ],
-  // };
+  // Show loading state while session is loading or client is mounting
+  if (!isClient || isPending) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900 mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading editor...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
@@ -323,7 +313,6 @@ export default function Editor() {
                         height={400}
                         preview="edit"
                         hideToolbar={false}
-                       
                       />
                     </div>
                   </div>
@@ -421,5 +410,21 @@ export default function Editor() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Main component with Suspense boundary
+export default function Editor() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900 mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading editor...</p>
+        </div>
+      </div>
+    }>
+      <EditorContent />
+    </Suspense>
   );
 }
