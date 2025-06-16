@@ -1,11 +1,25 @@
 {
 	"$schema": "https://turbo.build/schema.json",
 	"ui": "tui",
+	"globalEnv": [
+		"BETTER_AUTH_SECRET",
+		"DATABASE_URL",
+		"BLOB_READ_WRITE_TOKEN",
+		"BETTER_AUTH_URL",
+		"NODE_ENV"
+	],
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
 			"inputs": ["$TURBO_DEFAULT$", ".env*"],
-			"outputs": ["dist/**"]
+			"outputs": ["dist/**", ".next/**", "!.next/cache/**"],
+			"env": [
+				"BETTER_AUTH_SECRET",
+				"DATABASE_URL",
+				"BLOB_READ_WRITE_TOKEN",
+				"BETTER_AUTH_URL",
+				"NODE_ENV"
+			]
 		},
 		"lint": {
 			"dependsOn": ["^lint"]
@@ -15,24 +29,42 @@
 		},
 		"dev": {
 			"cache": false,
-			"persistent": true
+			"persistent": true,
+			"env": [
+				"BETTER_AUTH_SECRET",
+				"DATABASE_URL",
+				"BLOB_READ_WRITE_TOKEN",
+				"BETTER_AUTH_URL",
+				"NODE_ENV"
+			]
 		},
 		"db:push": {
 			"cache": false,
-			"persistent": true
+			"persistent": true,
+			"env": [
+				"DATABASE_URL"
+			]
 		},
 		"db:studio": {
 			"cache": false,
-			"persistent": true
+			"persistent": true,
+			"env": [
+				"DATABASE_URL"
+			]
 		},
 		"db:migrate": {
 			"cache": false,
-			"persistent": true
+			"persistent": true,
+			"env": [
+				"DATABASE_URL"
+			]
 		},
 		"db:generate": {
 			"cache": false,
-			"persistent": true
+			"persistent": true,
+			"env": [
+				"DATABASE_URL"
+			]
 		}
-		
 	}
 }
