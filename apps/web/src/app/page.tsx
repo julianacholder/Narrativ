@@ -5,8 +5,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { PenTool, Search, Calendar, User, Clock, ArrowRight, MessageCircle, Heart, BookOpen } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { 
+  PenTool, 
+  Search, 
+  Calendar, 
+  User, 
+  Clock, 
+  ArrowRight, 
+  MessageCircle, 
+  Heart, 
+  BookOpen,
+  Plus,
+  LayoutDashboard,
+  LogOut,
+  ChevronDown
+} from "lucide-react";
 import Link from "next/link";
+import { authClient } from "@/lib/auth-client";
 
 interface Post {
   id: string;
@@ -26,6 +42,10 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // Get session data
+  const { data: session, isPending } = authClient.useSession();
 
   // Fetch posts when component mounts
   useEffect(() => {
@@ -46,6 +66,15 @@ export default function HomePage() {
     
     fetchPosts();
   }, []);
+
+  const handleSignOut = async () => {
+    try {
+      await authClient.signOut();
+      setShowUserMenu(false);
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
 
   const categories = [
     { name: "All", color: "bg-slate-100 text-slate-700 hover:bg-slate-200" },
@@ -69,7 +98,7 @@ export default function HomePage() {
     return matchesSearch && matchesCategory;
   });
 
-  if (loading) {
+  if (loading || isPending) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
@@ -82,7 +111,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Navigation */}
+      {/* Navigation - Conditional based on login status */}
       <nav className="border-b bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <Link href="/" className="flex items-center space-x-2">
@@ -91,15 +120,87 @@ export default function HomePage() {
               Narrativ
             </span>
           </Link>
+          
           <div className="flex items-center space-x-4">
-            <Link href="/login">
-              <Button variant="ghost" className="hover:text-indigo-600">Login</Button>
-            </Link>
-            <Link href="/signup">
-              <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 cursor-pointer">
-                Get Started
-              </Button>
-            </Link>
+            {session?.user ? (
+              // Logged in user navigation
+              <>
+                <Link href="/dashboard">
+                  <Button variant="ghost" className="hover:text-indigo-600">
+                    <LayoutDashboard className="h-4 w-4 mr-2" />
+                    Dashboard
+                  </Button>
+                </Link>
+                <Link href="/new-post">
+                  <Button variant="ghost" className="hover:text-indigo-600">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Write
+                  </Button>
+                </Link>
+                
+                {/* User Menu */}
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    className="flex items-center space-x-2 hover:bg-indigo-50"
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                  >
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
+                      <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
+                    </Avatar>
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                  
+                  {showUserMenu && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border">
+                      <div className="px-4 py-2 border-b">
+                        <p className="text-sm font-medium text-gray-900">{session.user.name}</p>
+                        <p className="text-sm text-gray-500">{session.user.email}</p>
+                      </div>
+                      <Link href="/dashboard">
+                        <button className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                          <LayoutDashboard className="h-4 w-4 mr-2" />
+                          Dashboard
+                        </button>
+                      </Link>
+                      <Link href="/my-blog">
+                        <button className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                          <BookOpen className="h-4 w-4 mr-2" />
+                          My Blog
+                        </button>
+                      </Link>
+                      <Link href="/profile">
+                        <button className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                          <User className="h-4 w-4 mr-2" />
+                          Profile
+                        </button>
+                      </Link>
+                      <hr className="my-1" />
+                      <button
+                        onClick={handleSignOut}
+                        className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                      >
+                        <LogOut className="h-4 w-4 mr-2" />
+                        Sign Out
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              // Guest user navigation
+              <>
+                <Link href="/login">
+                  <Button variant="ghost" className="hover:text-indigo-600">Login</Button>
+                </Link>
+                <Link href="/signup">
+                  <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 cursor-pointer">
+                    Get Started
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -109,7 +210,7 @@ export default function HomePage() {
         <div className="text-center mb-16 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-3xl -z-10"></div>
           <div className="py-16 px-8">
-            <h1 className="text-5xl leading-tight  md:leading-relaxed  font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent ">
+            <h1 className="text-5xl leading-tight md:leading-relaxed font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
               Discover Amazing Stories
             </h1>
             <p className="text-xl text-slate-600 max-w-3xl mx-auto">
@@ -178,7 +279,7 @@ export default function HomePage() {
                   <img 
                     src={post.image || 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=400&h=200&fit=crop'} 
                     alt={post.title}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    className="w-full h-60 object-cover group-hover:scale-110 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
                   <Badge 

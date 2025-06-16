@@ -1,3 +1,5 @@
+// Updated Dashboard.tsx using the new category system
+
 'use client';
 
 import { useState, useEffect } from "react";
@@ -14,7 +16,6 @@ import {
   Edit, 
   Trash2, 
   Eye, 
-  Settings,
   LogOut,
   User,
   ChevronDown,
@@ -26,17 +27,23 @@ import {
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
+import { toast } from "sonner";
+
+// Import the new category system
+import { useCategories } from "@/lib/categories";
+import { CategoryBadge } from "@/components/ui/category-badge";
+import { CategoryStats } from "@/components/ui/category-stats";
 
 interface Post {
   id: string;
   title: string;
   category: string;
-  status: 'Published' | 'Draft'; // This is computed from the published field
+  status: 'Published' | 'Draft';
   date: string;
   views: number;
   comments: number;
   likes: number;
-  published?: boolean; // Add the actual database field
+  published?: boolean;
 }
 
 interface Activity {
@@ -49,8 +56,6 @@ interface Activity {
   isRead: boolean;
 }
 
-import { toast } from "sonner"; // Import toast from sonner directly
-
 const Dashboard = () => {
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
@@ -59,7 +64,9 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  // Updated fetchDashboardData function with dynamic userId
+  // Use the category hook - now you get all category functions
+  const { getCategoryColor, getCategoryLabel } = useCategories();
+
   useEffect(() => {
     async function fetchDashboardData() {
       if (!session?.user) {
@@ -67,14 +74,7 @@ const Dashboard = () => {
         return;
       }
       
-      console.log('🔍 Frontend session:', {
-        hasSession: !!session,
-        userId: session.user?.id,
-        userEmail: session.user?.email
-      });
-      
       try {
-        // Get userId from session
         const userId = session.user.id;
         
         if (!userId) {
@@ -83,9 +83,6 @@ const Dashboard = () => {
           return;
         }
         
-        console.log('📡 Making request to /api/users/posts with userId:', userId);
-        
-        // Fetch user's posts with userId parameter
         const postsResponse = await fetch(`/api/users/posts?userId=${userId}`, {
           method: 'GET',
           credentials: 'include',
@@ -94,31 +91,16 @@ const Dashboard = () => {
           }
         });
 
-        console.log('📥 Posts response:', {
-          status: postsResponse.status,
-          ok: postsResponse.ok,
-          headers: Object.fromEntries(postsResponse.headers.entries())
-        });
-
         if (postsResponse.ok) {
           const postsData = await postsResponse.json();
           console.log('✅ Posts data received:', postsData);
           setPosts(postsData);
         } else {
           const errorText = await postsResponse.text();
-          console.error('❌ Failed to fetch posts:', {
-            status: postsResponse.status,
-            statusText: postsResponse.statusText,
-            error: errorText
-          });
-          toast.error('Failed to load posts', {
-            description: 'Please refresh the page or try again'
-          });
+          console.error('❌ Failed to fetch posts:', errorText);
+          toast.error('Failed to load posts');
         }
 
-        console.log('📡 Making request to /api/users/activities with userId:', userId);
-        
-        // Fetch recent activities with userId parameter
         const activitiesResponse = await fetch(`/api/users/activities?userId=${userId}`, {
           method: 'GET',
           credentials: 'include',
@@ -127,22 +109,9 @@ const Dashboard = () => {
           }
         });
         
-        console.log('📥 Activities response:', {
-          status: activitiesResponse.status,
-          ok: activitiesResponse.ok
-        });
-        
         if (activitiesResponse.ok) {
           const activitiesData = await activitiesResponse.json();
-          console.log('✅ Activities data received:', activitiesData);
           setActivities(activitiesData);
-        } else {
-          const errorText = await activitiesResponse.text();
-          console.error('❌ Failed to fetch activities:', {
-            status: activitiesResponse.status,
-            statusText: activitiesResponse.statusText,
-            error: errorText
-          });
         }
 
       } catch (error) {
@@ -160,23 +129,17 @@ const Dashboard = () => {
   const handleSignOut = async () => {
     try {
       const loadingToast = toast.loading('Signing out...');
-      
       await authClient.signOut();
-      
       toast.dismiss(loadingToast);
       toast.success('Signed out successfully');
-      
       router.push('/');
     } catch (error) {
       console.error('Error signing out:', error);
-      toast.error('Failed to sign out', {
-        description: 'Please try again'
-      });
+      toast.error('Failed to sign out');
     }
   };
 
   const handleDeletePost = async (postId: string): Promise<void> => {
-    // Show confirmation toast with action buttons
     toast('Are you sure you want to delete this post?', {
       description: 'This action cannot be undone.',
       action: {
@@ -186,25 +149,17 @@ const Dashboard = () => {
             const userId = session?.user?.id;
             
             if (!userId) {
-              toast.error('Authentication error', {
-                description: 'Please sign in again'
-              });
+              toast.error('Authentication error');
               return;
             }
 
-            // Show loading toast
-            const loadingToast = toast.loading('Deleting post...', {
-              description: 'Please wait while we delete your post'
-            });
-
-            console.log('🗑️ Deleting post:', postId);
+            const loadingToast = toast.loading('Deleting post...');
             
             const response = await fetch(`/api/posts/${postId}/delete?userId=${userId}`, {
               method: 'DELETE',
               credentials: 'include',
             });
 
-            // Dismiss loading toast
             toast.dismiss(loadingToast);
 
             if (!response.ok) {
@@ -212,29 +167,18 @@ const Dashboard = () => {
               throw new Error(errorData.error || 'Failed to delete post');
             }
 
-            // Remove the post from the local state
             setPosts(prevPosts => prevPosts.filter(post => post.id !== postId));
-            
-            // Show success toast
-            toast.success('Post deleted successfully', {
-              description: 'Your post has been permanently deleted'
-            });
-            
-            console.log('✅ Post deleted successfully');
+            toast.success('Post deleted successfully');
             
           } catch (error) {
             console.error('❌ Error deleting post:', error);
-            toast.error('Failed to delete post', {
-              description: 'Please try again or contact support if the problem persists'
-            });
+            toast.error('Failed to delete post');
           }
         },
       },
       cancel: {
         label: 'Cancel',
-        onClick: () => {
-          toast.dismiss();
-        },
+        onClick: () => toast.dismiss(),
       },
     });
   };
@@ -266,28 +210,6 @@ const Dashboard = () => {
     }
   ];
 
-  const categoryStats = posts.reduce((acc, post) => {
-    const existing = acc.find(item => item.category === post.category);
-    if (existing) {
-      existing.count++;
-    } else {
-      acc.push({ category: post.category, count: 1 });
-    }
-    return acc;
-  }, [] as { category: string; count: number; }[]);
-
-  const getCategoryColor = (category: string) => {
-    const colors: { [key: string]: string } = {
-      "Tech": "bg-blue-100 text-blue-800",
-      "Work": "bg-green-100 text-green-800",
-      "Lifestyle": "bg-purple-100 text-purple-800",
-      "Travel": "bg-orange-100 text-orange-800",
-      "Food": "bg-red-100 text-red-800",
-      "Personal": "bg-pink-100 text-pink-800"
-    };
-    return colors[category] || "bg-gray-100 text-gray-800";
-  };
-
   if (isPending || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
@@ -300,7 +222,7 @@ const Dashboard = () => {
   }
 
   if (!session?.user) {
-    return null; // Will redirect to login
+    return null;
   }
 
   return (
@@ -328,14 +250,13 @@ const Dashboard = () => {
                 My Posts
               </Button>
             </Link>
-            <Link href="/create-post">
+            <Link href="/new-post">
               <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                 <Plus className="h-4 w-4 mr-2" />
                 New Post
               </Button>
             </Link>
             
-            {/* User Menu */}
             <div className="relative">
               <Button
                 variant="ghost"
@@ -361,7 +282,6 @@ const Dashboard = () => {
                       Edit Profile
                     </button>
                   </Link>
-                
                   <button
                     onClick={handleSignOut}
                     className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
@@ -411,7 +331,7 @@ const Dashboard = () => {
                   <CardTitle className="text-xl">Recent Posts</CardTitle>
                   <CardDescription>Manage your blog posts</CardDescription>
                 </div>
-                <Link href="/create-post">
+                <Link href="/new-post">
                   <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                     <Plus className="h-4 w-4 mr-2" />
                     New Post
@@ -432,9 +352,8 @@ const Dashboard = () => {
                             >
                               {post.status}
                             </Badge>
-                            <Badge className={getCategoryColor(post.category)}>
-                              {post.category}
-                            </Badge>
+                            {/* Using the CategoryBadge component - much cleaner! */}
+                            <CategoryBadge category={post.category} />
                             <span className="flex items-center">
                               <Calendar className="h-4 w-4 mr-1" />
                               {new Date(post.date).toLocaleDateString()}
@@ -454,7 +373,7 @@ const Dashboard = () => {
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <Link href={`/edit-post?id=${post.id}`}>
+                          <Link href={`/new-post?id=${post.id}`}>
                             <Button variant="ghost" size="sm" className="hover:text-indigo-600">
                               <Edit className="h-4 w-4" />
                             </Button>
@@ -480,7 +399,7 @@ const Dashboard = () => {
                       <BookOpen className="h-16 w-16 text-slate-400 mx-auto mb-4" />
                       <h3 className="text-lg font-semibold text-slate-600 mb-2">No posts yet</h3>
                       <p className="text-slate-500 mb-4">Create your first blog post to get started</p>
-                      <Link href="/create-post">
+                      <Link href="/new-post">
                         <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                           <Plus className="h-4 w-4 mr-2" />
                           Create Post
@@ -535,27 +454,8 @@ const Dashboard = () => {
 
           {/* Analytics Sidebar */}
           <div className="space-y-6">
-            {/* Category Breakdown */}
-            <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle>Posts by Category</CardTitle>
-                <CardDescription>Distribution of your content</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {categoryStats.length > 0 ? categoryStats.map((category, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <Badge variant="secondary" className={getCategoryColor(category.category)}>
-                        {category.category}
-                      </Badge>
-                      <span className="text-sm font-medium">{category.count} posts</span>
-                    </div>
-                  )) : (
-                    <p className="text-sm text-slate-500 text-center py-4">No categories yet</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            {/* Using the CategoryStats component - super clean! */}
+            <CategoryStats posts={posts} />
 
             {/* Quick Actions */}
             <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
@@ -564,7 +464,7 @@ const Dashboard = () => {
                 <CardDescription>Common tasks</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Link href="/create-post">
+                <Link href="/new-post">
                   <Button variant="outline" className="w-full justify-start hover:bg-indigo-50">
                     <Plus className="h-4 w-4 mr-2" />
                     Create New Post
@@ -582,7 +482,6 @@ const Dashboard = () => {
                     Manage All Posts
                   </Button>
                 </Link>
-                
               </CardContent>
             </Card>
           </div>

@@ -4,6 +4,7 @@ import { posts, comments, postLikes } from '@server/db/schema';
 import { eq, count, desc } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { auth } from '@server/lib/auth';
+import { image } from '@uiw/react-md-editor';
 
 export async function GET(request: NextRequest) {
   try {
@@ -107,6 +108,7 @@ export async function GET(request: NextRequest) {
       .select({
         id: posts.id,
         title: posts.title,
+        image: posts.image,
         excerpt: posts.excerpt,
         category: posts.category,
         published: posts.published,
@@ -117,11 +119,11 @@ export async function GET(request: NextRequest) {
       .where(eq(posts.authorId, userId))
       .orderBy(desc(posts.createdAt));
 
-    console.log('📝 Found posts:', userPosts.length);
-    console.log('🔍 First post example:', userPosts[0]);
+    console.log(' Found posts:', userPosts.length);
+    console.log(' First post example:', userPosts[0]);
 
     if (userPosts.length === 0) {
-      console.log('⚠️ No posts returned from main query');
+      console.log(' No posts returned from main query');
       return Response.json([]);
     }
 

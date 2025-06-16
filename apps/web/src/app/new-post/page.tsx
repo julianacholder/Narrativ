@@ -1,3 +1,5 @@
+// Updated Editor.tsx using the new category system
+
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
@@ -8,12 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import dynamic from 'next/dynamic';
 
-// Properly configure dynamic import for MDEditor
+// Import the new category system
+import { CategorySelect } from "@/components/ui/category-select";
+import { CategoryBadge } from "@/components/ui/category-badge";
+
 const MDEditor = dynamic(() => import('@uiw/react-md-editor'), {
   ssr: false,
   loading: () => (
@@ -46,21 +49,6 @@ interface FormData {
   status: 'draft' | 'published';
   image: string;
 }
-
-interface Category {
-  value: string;
-  label: string;
-  color: string;
-}
-
-const CATEGORIES: Category[] = [
-  { value: "tech", label: "Technology", color: "bg-blue-100 text-blue-800" },
-  { value: "lifestyle", label: "Lifestyle", color: "bg-pink-100 text-pink-800" },
-  { value: "work", label: "Work", color: "bg-purple-100 text-purple-800" },
-  { value: "travel", label: "Travel", color: "bg-green-100 text-green-800" },
-  { value: "food", label: "Food", color: "bg-orange-100 text-orange-800" },
-  { value: "personal", label: "Personal", color: "bg-gray-100 text-gray-800" }
-];
 
 // Separate component to handle search params
 function EditorContent() {
@@ -245,8 +233,8 @@ function EditorContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
-      <div className="max-w-4xl mx-auto p-6 md:p-8">
-        <div className="flex items-center justify-between mb-8">
+      <div className="max-w-7xl mx-auto p-6 md:p-8">
+        <div className="flex items-start mb:items-center justify-between mb-8 flex-col md:flex-row  gap-4">
           <div className="flex items-center gap-4">
             <Button
               variant="outline"
@@ -331,22 +319,23 @@ function EditorContent() {
                   <Label className="text-sm font-semibold text-slate-700 mb-2 block">
                     Category
                   </Label>
-                  <Select
+                  {/* Using the new CategorySelect component */}
+                  <CategorySelect
                     value={formData.category}
                     onValueChange={(value) => handleInputChange('category', value)}
-                  >
-                    <SelectTrigger className="rounded-xl">
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map((cat) => (
-                        <SelectItem key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Select category"
+                  />
                 </div>
+
+                {/* Show selected category with proper styling */}
+                {formData.category && (
+                  <div>
+                    <Label className="text-sm font-semibold text-slate-700 mb-2 block">
+                      Selected Category
+                    </Label>
+                    <CategoryBadge category={formData.category} />
+                  </div>
+                )}
 
                 <div>
                   <Label className="text-sm font-semibold text-slate-700 mb-2 block">
@@ -399,7 +388,7 @@ function EditorContent() {
                       disabled={isUploading}
                       className="rounded-xl"
                     >
-                      <Upload className="w-4 h-4 mr-2" />
+                      <Upload className="w-4 mr-2" />
                       {isUploading ? 'Uploading...' : 'Choose Image'}
                     </Button>
                   </div>
@@ -425,6 +414,6 @@ export default function Editor() {
       </div>
     }>
       <EditorContent />
-    </Suspense>
+         </Suspense>
   );
 }
