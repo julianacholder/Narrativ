@@ -62,7 +62,6 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [sessionRetryCount, setSessionRetryCount] = useState(0);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -86,55 +85,20 @@ const Dashboard = () => {
 
   useEffect(() => {
     async function fetchDashboardData() {
-      console.log('🔄 Dashboard useEffect triggered:', {
-        isPending,
-        hasSession: !!session,
-        hasUser: !!session?.user,
-        userId: session?.user?.id,
-        retryCount: sessionRetryCount
-      });
-
-      // If session is still pending, wait
-      if (isPending) {
-        console.log('⏳ Session is pending, waiting...');
-        return;
-      }
-
-      // If no session/user but we haven't retried much, try again after delay
-      if (!session?.user && sessionRetryCount < 3) {
-        console.log(`🔄 No session found, retry ${sessionRetryCount + 1}/3 in 1 second...`);
-        setSessionRetryCount(prev => prev + 1);
-        
-        setTimeout(() => {
-          // Trigger a re-render by updating loading state
-          setLoading(true);
-        }, 1000);
-        return;
-      }
-
-      // If still no session after retries, show auth required
       if (!session?.user) {
-        console.log('❌ No session found after retries');
-        setLoading(false);
+        console.log('❌ No session or user found');
         return;
       }
-
-      // Reset retry count on successful session
-      if (sessionRetryCount > 0) {
-        setSessionRetryCount(0);
-      }
-
+      
       try {
         const userId = session.user.id;
-        console.log('✅ Found userId:', userId);
         
         if (!userId) {
           console.error('❌ No userId found in session');
           setLoading(false);
           return;
         }
-
-        // Fetch posts
+        
         const postsResponse = await fetch(`/api/users/posts?userId=${userId}`, {
           method: 'GET',
           credentials: 'include',
@@ -145,7 +109,6 @@ const Dashboard = () => {
 
         if (postsResponse.ok) {
           const postsData = await postsResponse.json();
-          console.log('✅ Posts loaded:', postsData.length);
           setPosts(postsData);
         } else {
           const errorText = await postsResponse.text();
@@ -153,7 +116,6 @@ const Dashboard = () => {
           toast.error('Failed to load posts');
         }
 
-        // Fetch activities
         const activitiesResponse = await fetch(`/api/users/activities?userId=${userId}`, {
           method: 'GET',
           credentials: 'include',
@@ -164,22 +126,20 @@ const Dashboard = () => {
         
         if (activitiesResponse.ok) {
           const activitiesData = await activitiesResponse.json();
-          console.log('✅ Activities loaded:', activitiesData.length);
           setActivities(activitiesData);
-        } else {
-          console.log('⚠️ Activities failed, but continuing...');
         }
 
       } catch (error) {
         console.error('💥 Error fetching dashboard data:', error);
-        toast.error('Failed to load dashboard data');
       } finally {
         setLoading(false);
       }
     }
 
-    fetchDashboardData();
-  }, [session, isPending, sessionRetryCount]);
+    if (session?.user) {
+      fetchDashboardData();
+    }
+  }, [session]);
 
   const handleSignOut = async () => {
     try {
@@ -271,43 +231,24 @@ const Dashboard = () => {
     }
   ];
 
-  // Show loading while session is pending or while retrying
   if (isPending || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600 mx-auto"></div>
           <p className="mt-4 text-slate-600">Loading dashboard...</p>
-          {sessionRetryCount > 0 && (
-            <p className="mt-2 text-xs text-slate-500">
-              Establishing session... (attempt {sessionRetryCount}/3)
-            </p>
-          )}
         </div>
       </div>
     );
   }
 
-  // Show auth required only after retries are exhausted
   if (!session?.user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-slate-800 mb-4">Authentication Required</h2>
-          <p className="text-slate-600 mb-4">Please sign in to access your dashboard.</p>
-          <Link href="/sign-in">
-            <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
-              Sign In
-            </Button>
-          </Link>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Navigation */}
+      {/* Mobile-Responsive Navigation */}
       <nav className="border-b bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
@@ -398,6 +339,7 @@ const Dashboard = () => {
           {showMobileMenu && (
             <div className="md:hidden mt-4 pb-4 border-t" ref={mobileMenuRef}>
               <div className="flex flex-col space-y-2 pt-4">
+                {/* User Info */}
                 <div className="flex items-center space-x-3 px-3 py-2 bg-slate-50 rounded-lg mb-2">
                   <Avatar className="h-10 w-10">
                     <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
@@ -625,6 +567,7 @@ const Dashboard = () => {
 
           {/* Analytics Sidebar */}
           <div className="space-y-4 md:space-y-6">
+            {/* Using the CategoryStats component */}
             <CategoryStats posts={posts} />
 
             {/* Quick Actions */}
