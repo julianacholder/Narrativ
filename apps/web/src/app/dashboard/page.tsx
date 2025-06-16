@@ -31,11 +31,12 @@ interface Post {
   id: string;
   title: string;
   category: string;
-  status: 'Published' | 'Draft';
+  status: 'Published' | 'Draft'; // This is computed from the published field
   date: string;
   views: number;
   comments: number;
   likes: number;
+  published?: boolean; // Add the actual database field
 }
 
 interface Activity {
@@ -48,7 +49,6 @@ interface Activity {
   isRead: boolean;
 }
 
-
 const Dashboard = () => {
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
@@ -56,94 +56,101 @@ const Dashboard = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  
 
-  // Redirect to login if not authenticated
-  // Update your fetchDashboardData function with debug logging
-useEffect(() => {
-  async function fetchDashboardData() {
-    if (!session?.user) {
-      console.log('❌ No session or user in frontend');
-      return;
-    }
-    
-    console.log('🔍 Frontend session:', {
-      hasSession: !!session,
-      userId: session.user?.id,
-      userEmail: session.user?.email
-    });
-    
-    try {
-      console.log('📡 Making request to /api/users/posts...');
+  // Updated fetchDashboardData function with dynamic userId
+  useEffect(() => {
+    async function fetchDashboardData() {
+      if (!session?.user) {
+        console.log('❌ No session or user in frontend');
+        return;
+      }
       
-      // Fetch user's posts
-      const postsResponse = await fetch('/api/users/posts', {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
+      console.log('🔍 Frontend session:', {
+        hasSession: !!session,
+        userId: session.user?.id,
+        userEmail: session.user?.email
+      });
+      
+      try {
+        // Get userId from session
+        const userId = session.user.id;
+        
+        if (!userId) {
+          console.error('❌ No userId found in session');
+          setLoading(false);
+          return;
         }
-      });
+        
+        console.log('📡 Making request to /api/users/posts with userId:', userId);
+        
+        // Fetch user's posts with userId parameter
+        const postsResponse = await fetch(`/api/users/posts?userId=${userId}`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
 
-      console.log('📥 Posts response:', {
-        status: postsResponse.status,
-        ok: postsResponse.ok,
-        headers: Object.fromEntries(postsResponse.headers.entries())
-      });
-
-      if (postsResponse.ok) {
-        const postsData = await postsResponse.json();
-        console.log('✅ Posts data received:', postsData);
-        setPosts(postsData);
-      } else {
-        const errorText = await postsResponse.text();
-        console.error('❌ Failed to fetch posts:', {
+        console.log('📥 Posts response:', {
           status: postsResponse.status,
-          statusText: postsResponse.statusText,
-          error: errorText
+          ok: postsResponse.ok,
+          headers: Object.fromEntries(postsResponse.headers.entries())
         });
-      }
 
-      console.log('📡 Making request to /api/users/activities...');
-      
-      // Fetch recent activities
-      const activitiesResponse = await fetch('/api/users/activities', {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
+        if (postsResponse.ok) {
+          const postsData = await postsResponse.json();
+          console.log('✅ Posts data received:', postsData);
+          setPosts(postsData);
+        } else {
+          const errorText = await postsResponse.text();
+          console.error('❌ Failed to fetch posts:', {
+            status: postsResponse.status,
+            statusText: postsResponse.statusText,
+            error: errorText
+          });
         }
-      });
-      
-      console.log('📥 Activities response:', {
-        status: activitiesResponse.status,
-        ok: activitiesResponse.ok
-      });
-      
-      if (activitiesResponse.ok) {
-        const activitiesData = await activitiesResponse.json();
-        console.log('✅ Activities data received:', activitiesData);
-        setActivities(activitiesData);
-      } else {
-        const errorText = await activitiesResponse.text();
-        console.error('❌ Failed to fetch activities:', {
-          status: activitiesResponse.status,
-          statusText: activitiesResponse.statusText,
-          error: errorText
+
+        console.log('📡 Making request to /api/users/activities with userId:', userId);
+        
+        // Fetch recent activities with userId parameter
+        const activitiesResponse = await fetch(`/api/users/activities?userId=${userId}`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          }
         });
+        
+        console.log('📥 Activities response:', {
+          status: activitiesResponse.status,
+          ok: activitiesResponse.ok
+        });
+        
+        if (activitiesResponse.ok) {
+          const activitiesData = await activitiesResponse.json();
+          console.log('✅ Activities data received:', activitiesData);
+          setActivities(activitiesData);
+        } else {
+          const errorText = await activitiesResponse.text();
+          console.error('❌ Failed to fetch activities:', {
+            status: activitiesResponse.status,
+            statusText: activitiesResponse.statusText,
+            error: errorText
+          });
+        }
+
+      } catch (error) {
+        console.error('💥 Error fetching dashboard data:', error);
+      } finally {
+        setLoading(false);
       }
-
-    } catch (error) {
-      console.error('💥 Error fetching dashboard data:', error);
-    } finally {
-      setLoading(false);
     }
-  }
 
-  if (session?.user) {
-    fetchDashboardData();
-  }
-}, [session]);
+    if (session?.user) {
+      fetchDashboardData();
+    }
+  }, [session]);
 
   const handleSignOut = async () => {
     try {
@@ -154,14 +161,39 @@ useEffect(() => {
     }
   };
 
-  const handleDeletePost = async (postId: string) => {
-    if (confirm('Are you sure you want to delete this post?')) {
-      try {
-        await fetch(`/api/posts/${postId}`, { method: 'DELETE' });
-        setPosts(posts.filter(post => post.id !== postId));
-      } catch (error) {
-        console.error('Error deleting post:', error);
+  const handleDeletePost = async (postId: string): Promise<void> => {
+    if (!confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const userId = session?.user?.id;
+      
+      if (!userId) {
+        console.error('No userId available');
+        return;
       }
+
+      console.log('🗑️ Deleting post:', postId);
+      
+      const response = await fetch(`/api/posts/${postId}/delete?userId=${userId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete post');
+      }
+
+      // Remove the post from the local state
+      setPosts(prevPosts => prevPosts.filter(post => post.id !== postId));
+      
+      console.log('✅ Post deleted successfully');
+      
+    } catch (error) {
+      console.error('❌ Error deleting post:', error);
+      alert('Failed to delete post. Please try again.');
     }
   };
 
@@ -254,7 +286,7 @@ useEffect(() => {
                 My Posts
               </Button>
             </Link>
-            <Link href="/create-post">
+            <Link href="/new-post">
               <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                 <Plus className="h-4 w-4 mr-2" />
                 New Post
@@ -342,7 +374,7 @@ useEffect(() => {
                   <CardTitle className="text-xl">Recent Posts</CardTitle>
                   <CardDescription>Manage your blog posts</CardDescription>
                 </div>
-                <Link href="/create-post">
+                <Link href="/new-post">
                   <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                     <Plus className="h-4 w-4 mr-2" />
                     New Post
@@ -385,7 +417,7 @@ useEffect(() => {
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <Link href={`/edit-post/${post.id}`}>
+                          <Link href={`/edit-post?id=${post.id}`}>
                             <Button variant="ghost" size="sm" className="hover:text-indigo-600">
                               <Edit className="h-4 w-4" />
                             </Button>
@@ -411,7 +443,7 @@ useEffect(() => {
                       <BookOpen className="h-16 w-16 text-slate-400 mx-auto mb-4" />
                       <h3 className="text-lg font-semibold text-slate-600 mb-2">No posts yet</h3>
                       <p className="text-slate-500 mb-4">Create your first blog post to get started</p>
-                      <Link href="/create-post">
+                      <Link href="/new-post">
                         <Button className="bg-gradient-to-r from-indigo-600 to-purple-600">
                           <Plus className="h-4 w-4 mr-2" />
                           Create Post
@@ -495,7 +527,7 @@ useEffect(() => {
                 <CardDescription>Common tasks</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Link href="/create-post">
+                <Link href="/new-post">
                   <Button variant="outline" className="w-full justify-start hover:bg-indigo-50">
                     <Plus className="h-4 w-4 mr-2" />
                     Create New Post

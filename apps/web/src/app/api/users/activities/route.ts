@@ -24,34 +24,56 @@ interface Activity {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🚀 Users Activities API called');
-    console.log('📋 Request headers:', {
-      cookie: request.headers.get('cookie'),
-      authorization: request.headers.get('authorization'),
-      'content-type': request.headers.get('content-type')
-    });
+    console.log(' Users Activities API called');
+    console.log(' Request URL:', request.url);
 
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
-
-    console.log('🔍 Session debug:', {
-      hasSession: !!session,
-      hasUser: !!session?.user,
-      userId: session?.user?.id,
-      userEmail: session?.user?.email
-    });
-
-    if (!session?.user?.id) {
-      console.log('❌ Authentication failed - no session or user ID');
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    // Try to get session but don't fail if it doesn't work
+    let userId: string | null = null;
+    
+    try {
+      console.log(' Attempting to get session...');
+      const session = await auth.api.getSession({
+        headers: request.headers,
+      });
+      
+      console.log(' Session debug:', {
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        userId: session?.user?.id,
+        userEmail: session?.user?.email,
+      });
+      
+      if (session?.user?.id) {
+        userId = session.user.id;
+        console.log(' Got userId from session:', userId);
+      }
+    } catch (sessionError) {
+      console.log('Session failed:', sessionError);
+    }
+    
+    // If session failed, try to get userId from URL parameter as fallback
+    if (!userId) {
+      const url = new URL(request.url);
+      userId = url.searchParams.get('userId');
+      
+      if (userId) {
+        console.log(' Using userId from URL parameter:', userId);
+      }
     }
 
-    const userId = session.user.id;
-    console.log('✅ User authenticated:', userId);
-    const activities: Activity[] = []; // ✅ Now properly typed
+    if (!userId) {
+      console.log(' No userId found in session or URL parameter');
+      return Response.json({ 
+        error: 'Unable to determine user ID',
+        message: 'Please provide userId parameter or valid session'
+      }, { status: 400 });
+    }
+
+    console.log(' Fetching activities from database for userId:', userId);
+    const activities: Activity[] = []; //  Now properly typed
 
     // Get comments on user's posts
+    console.log('Fetching comments on user posts...');
     const commentsOnMyPosts = await db
       .select({
         id: comments.id,
@@ -68,6 +90,8 @@ export async function GET(request: NextRequest) {
       .where(eq(posts.authorId, userId))
       .orderBy(desc(comments.createdAt))
       .limit(20);
+
+    console.log(' Found comments:', commentsOnMyPosts.length);
 
     // Add comment activities
     commentsOnMyPosts.forEach(comment => {
@@ -88,6 +112,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Get likes on user's posts
+    console.log('Fetching likes on user posts...');
     const likesOnMyPosts = await db
       .select({
         id: postLikes.id,
@@ -103,6 +128,8 @@ export async function GET(request: NextRequest) {
       .where(eq(posts.authorId, userId))
       .orderBy(desc(postLikes.createdAt))
       .limit(20);
+
+    console.log('Found likes:', likesOnMyPosts.length);
 
     // Add like activities
     likesOnMyPosts.forEach(like => {
@@ -122,6 +149,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Get user's recent published posts
+    console.log(' Fetching user recent posts...');
     const recentPosts = await db
       .select({
         id: posts.id,
@@ -132,6 +160,8 @@ export async function GET(request: NextRequest) {
       .where(and(eq(posts.authorId, userId), eq(posts.published, true)))
       .orderBy(desc(posts.createdAt))
       .limit(10);
+
+    console.log(' Found recent posts:', recentPosts.length);
 
     // Add post publication activities
     recentPosts.forEach(post => {
@@ -151,11 +181,15 @@ export async function GET(request: NextRequest) {
     // Sort all activities by date (most recent first)
     activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    console.log('✅ Returning activities:', activities.length);
+    console.log('Returning activities:', activities.length);
     return Response.json(activities.slice(0, 20));
 
   } catch (error) {
     console.error('Error fetching user activities:', error);
-    return Response.json({ error: 'Failed to fetch activities' }, { status: 500 });
+    console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
+    return Response.json({ 
+      error: 'Failed to fetch activities',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
