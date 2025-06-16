@@ -11,13 +11,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import dynamic from 'next/dynamic';
+import dynamicImport from 'next/dynamic';
 
 // Use a React 18 compatible editor
-const MDEditor = dynamic(() => import('@uiw/react-md-editor').then(mod => ({ default: mod.default })), { 
+const MDEditor = dynamicImport(() => import('@uiw/react-md-editor').then(mod => ({ default: mod.default })), { 
   ssr: false 
 });
 import '@uiw/react-md-editor/markdown-editor.css';
+
+// Force dynamic rendering to prevent prerendering issues
+export const dynamic = 'force-dynamic';
 
 // Types - Updated to match your database schema
 interface BlogPost {

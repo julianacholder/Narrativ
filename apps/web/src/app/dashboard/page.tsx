@@ -361,12 +361,7 @@ const Dashboard = () => {
                       Edit Profile
                     </button>
                   </Link>
-                  <Link href="/settings">
-                    <button className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                      <Settings className="h-4 w-4 mr-2" />
-                      Settings
-                    </button>
-                  </Link>
+                
                   <button
                     onClick={handleSignOut}
                     className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
@@ -587,12 +582,7 @@ const Dashboard = () => {
                     Manage All Posts
                   </Button>
                 </Link>
-                <Link href="/analytics">
-                  <Button variant="outline" className="w-full justify-start hover:bg-yellow-50">
-                    <BarChart3 className="h-4 w-4 mr-2" />
-                    View Analytics
-                  </Button>
-                </Link>
+                
               </CardContent>
             </Card>
           </div>
