@@ -1,4 +1,5 @@
-'use client';
+"use client";
+
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { PenTool, ArrowLeft, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
+import { toast } from "sonner"; // Import sonner toast
 
 const Login = () => {
   const router = useRouter();
@@ -17,6 +19,17 @@ const Login = () => {
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Basic validation
+    if (!email.trim()) {
+      toast.error("Please enter your email");
+      return;
+    }
+
+    if (!password) {
+      toast.error("Please enter your password");
+      return;
+    }
+
     await signIn.email(
       {
         email,
@@ -33,7 +46,16 @@ const Login = () => {
         },
         onError: (ctx) => {
           setIsLoading(false);
-          // Handle error - you can add your own error handling here
+          // Handle specific error cases
+          const errorMessage = ctx.error?.message?.toLowerCase() || "";
+          
+          if (errorMessage.includes("invalid email") || errorMessage.includes("user not found")) {
+            toast.error("No account found with this email");
+          } else if (errorMessage.includes("password") || errorMessage.includes("credentials")) {
+            toast.error("Incorrect password. Please try again.");
+          } else {
+            toast.error("Login failed. Please try again.");
+          }
           console.error("Login failed:", ctx.error);
         }
       }
@@ -56,6 +78,7 @@ const Login = () => {
         onError: (ctx) => {
           setIsLoading(false);
           // Handle Google sign-in error
+          toast.error("Google sign-in failed. Please try again.");
           console.error("Google sign-in failed:", ctx.error);
         }
       }
@@ -129,8 +152,6 @@ const Login = () => {
                 )}
               </Button>
             </form>
-
-           
 
             <Button
               variant="outline"
