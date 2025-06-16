@@ -6,7 +6,8 @@
 		"DATABASE_URL",
 		"BLOB_READ_WRITE_TOKEN",
 		"BETTER_AUTH_URL",
-		"NODE_ENV"
+		"NODE_ENV",
+		"NEXT_PUBLIC_SERVER_URL"
 	],
 	"tasks": {
 		"build": {
@@ -18,7 +19,8 @@
 				"DATABASE_URL",
 				"BLOB_READ_WRITE_TOKEN",
 				"BETTER_AUTH_URL",
-				"NODE_ENV"
+				"NODE_ENV",
+				"NEXT_PUBLIC_SERVER_URL"
 			]
 		},
 		"lint": {
@@ -35,7 +37,8 @@
 				"DATABASE_URL",
 				"BLOB_READ_WRITE_TOKEN",
 				"BETTER_AUTH_URL",
-				"NODE_ENV"
+				"NODE_ENV",
+				"NEXT_PUBLIC_SERVER_URL"
 			]
 		},
 		"db:push": {
