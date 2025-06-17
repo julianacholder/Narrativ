@@ -29,16 +29,22 @@ const Login = () => {
     // Handle different possible structures
     if (!data) return null;
     
+    // Handle the structure we're seeing: {data: {...}, error: null}
+    if (data.data && data.data.user) {
+      console.log("✅ Found user in data.data.user");
+      return data.data.user;
+    }
+    
+    // Handle if the whole response is the data
+    if (data.data && data.data.id && data.data.email) {
+      console.log("✅ Found user data directly in data.data");
+      return data.data;
+    }
+    
     // Direct user access
     if (data.user) {
       console.log("✅ Found user directly on data");
       return data.user;
-    }
-    
-    // Maybe it's nested in data property
-    if (data.data && data.data.user) {
-      console.log("✅ Found user in data.data");
-      return data.data.user;
     }
     
     // Maybe user is at root level
@@ -111,9 +117,25 @@ const Login = () => {
                 try {
                   console.log("🔍 Checking session after login...");
                   
-                  // Try to get fresh session
-                  const freshSession = await authClient.getSession();
-                  console.log("🔍 Fresh session after login:", freshSession);
+                  // Try multiple approaches to get the session
+                  let attempts = 0;
+                  const maxAttempts = 5;
+                  let freshSession = null;
+                  
+                  while (attempts < maxAttempts && !freshSession?.data?.user) {
+                    attempts++;
+                    console.log(`🔍 Session check attempt ${attempts}/${maxAttempts}`);
+                    
+                    freshSession = await authClient.getSession();
+                    console.log(`🔍 Fresh session attempt ${attempts}:`, freshSession);
+                    
+                    if (freshSession?.data?.user) {
+                      break;
+                    }
+                    
+                    // Wait a bit before next attempt
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                  }
                   
                   const freshUser = getUser(freshSession);
                   console.log("🔍 Fresh user after login:", freshUser);
@@ -122,16 +144,21 @@ const Login = () => {
                     console.log("✅ Session confirmed with user ID, redirecting to dashboard...");
                     router.push("/dashboard");
                   } else {
-                    console.log("❌ No user ID found in session, redirecting to new-post as fallback...");
-                    console.log("❌ Fresh session structure:", freshSession);
-                    router.push("/new-post");
+                    console.log("❌ No user ID found in session after multiple attempts");
+                    console.log("❌ Final session structure:", freshSession);
+                    
+                    // Since login was successful but session isn't available, 
+                    // try redirecting to dashboard anyway - it might work on the dashboard side
+                    console.log("🔄 Attempting dashboard redirect despite missing session...");
+                    router.push("/dashboard");
                   }
                   
                 } catch (sessionError) {
                   console.error("❌ Error checking session:", sessionError);
-                  router.push("/new-post");
+                  // Try dashboard anyway since login was successful
+                  router.push("/dashboard");
                 }
-              }, 1500); // Increased wait time
+              }, 1000);
               
             } else {
               console.error("❌ Login failed with status:", ctx.response.status);

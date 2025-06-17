@@ -144,14 +144,52 @@ const Dashboard = () => {
       console.log("📊 SessionData in fetchDashboardData:", sessionData);
       console.log("📊 CurrentUser in fetchDashboardData:", currentUser);
       
+      // If no current user, try to get session multiple times
       if (!currentUser) {
-        console.log('❌ No user found in fetchDashboardData');
+        console.log('❌ No user found in fetchDashboardData, trying to refresh session...');
+        
+        let attempts = 0;
+        const maxAttempts = 3;
+        let freshSession = null;
+        
+        while (attempts < maxAttempts && !freshSession?.data?.user) {
+          attempts++;
+          console.log(`📊 Session refresh attempt ${attempts}/${maxAttempts}`);
+          
+          try {
+            freshSession = await authClient.getSession();
+            console.log(`📊 Fresh session attempt ${attempts}:`, freshSession);
+            
+            if (freshSession?.data?.user) {
+              console.log("✅ Found user in fresh session!");
+              // The session hook should update automatically, so we don't need to do anything here
+              break;
+            }
+          } catch (error) {
+            console.error(`❌ Error getting session on attempt ${attempts}:`, error);
+          }
+          
+          // Wait before next attempt
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        if (!freshSession?.data?.user) {
+          console.log('❌ Still no user after refresh attempts, stopping loading');
+          setLoading(false);
+          return;
+        }
+      }
+      
+      const userToUse = currentUser || getUser(sessionData);
+      
+      if (!userToUse) {
+        console.log('❌ No user available after all attempts');
         setLoading(false);
         return;
       }
       
       try {
-        const userId = currentUser.id;
+        const userId = userToUse.id;
         console.log("📊 Using userId:", userId);
         
         if (!userId) {
@@ -210,8 +248,8 @@ const Dashboard = () => {
       }
     }
 
-    // Only fetch if we have a user and not pending
-    if (currentUser && !isPending) {
+    // Try to fetch data if we have any indication of a user or if we're still pending
+    if (currentUser || isPending) {
       console.log("📊 Conditions met, calling fetchDashboardData");
       fetchDashboardData();
     } else {
@@ -219,10 +257,15 @@ const Dashboard = () => {
       console.log("  - has currentUser:", !!currentUser);
       console.log("  - isPending:", isPending);
       
-      // If not pending and no user, stop loading
+      // Give it more time if we just finished pending
       if (!isPending && !currentUser) {
-        console.log("📊 No user found and not pending, setting loading to false");
-        setLoading(false);
+        console.log("📊 No user found and not pending, waiting a bit more before giving up...");
+        setTimeout(() => {
+          if (!getUser(sessionData)) {
+            console.log("📊 Still no user after extra wait, setting loading to false");
+            setLoading(false);
+          }
+        }, 2000);
       }
     }
   }, [sessionData, currentUser, isPending]);
