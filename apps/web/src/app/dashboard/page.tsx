@@ -29,6 +29,13 @@ import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+}
+
 interface Post {
   id: string;
   title: string;
@@ -53,65 +60,42 @@ interface Activity {
 
 const Dashboard = () => {
   const router = useRouter();
-  const { data: sessionData, isPending, error } = authClient.useSession();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sessionLoading, setSessionLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Helper function to safely get user from session data
-  const getUser = (data: any) => {
-    console.log("🏠 Analyzing session data structure:", data);
-    console.log("🏠 Session data type:", typeof data);
-    console.log("🏠 Session data keys:", data ? Object.keys(data) : 'no data');
-    
-    // Handle different possible structures
-    if (!data) return null;
-    
-    // Direct user access
-    if (data.user) {
-      console.log("✅ Found user directly on data");
-      return data.user;
+  // Function to fetch session from API
+  const fetchSession = async () => {
+    try {
+      console.log("🏠 Fetching session from /api/auth/session");
+      const response = await fetch('/api/auth/session', {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        console.error("❌ Session API response not ok:", response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      console.log("✅ Session API response:", data);
+      
+      return data.user || null;
+    } catch (error) {
+      console.error("💥 Error fetching session:", error);
+      return null;
     }
-    
-    // Maybe it's nested in data property
-    if (data.data && data.data.user) {
-      console.log("✅ Found user in data.data");
-      return data.data.user;
-    }
-    
-    // Maybe user is at root level
-    if (data.id && data.email && data.name) {
-      console.log("✅ Data itself appears to be user");
-      return data;
-    }
-    
-    console.log("❌ No user found in session data");
-    return null;
   };
-
-  const currentUser = getUser(sessionData);
-
-  // Comprehensive debug logging
-  useEffect(() => {
-    console.log("🏠 DASHBOARD COMPONENT RENDER:");
-    console.log("  - isPending:", isPending);
-    console.log("  - error:", error);
-    console.log("  - sessionData raw:", sessionData);
-    console.log("  - sessionData stringified:", JSON.stringify(sessionData, null, 2));
-    console.log("  - currentUser:", currentUser);
-    console.log("  - currentUser?.id:", currentUser?.id);
-    console.log("  - currentUser?.email:", currentUser?.email);
-    console.log("  - currentUser?.name:", currentUser?.name);
-    console.log("  - loading state:", loading);
-    
-    if (error) {
-      console.error("🚨 Session error:", error);
-    }
-  }, [sessionData, isPending, error, loading, currentUser]);
 
   // Debug when component mounts
   useEffect(() => {
@@ -121,6 +105,27 @@ const Dashboard = () => {
       console.log("🏠 Dashboard component unmounted");
     };
   }, []);
+
+  // Check for session on component mount
+  useEffect(() => {
+    const checkSession = async () => {
+      console.log("🏠 Checking session on dashboard mount...");
+      setSessionLoading(true);
+      
+      const user = await fetchSession();
+      console.log("🏠 Dashboard session check result:", user);
+      
+      setCurrentUser(user);
+      setSessionLoading(false);
+      
+      if (!user) {
+        console.log("❌ No user found, redirecting to login");
+        router.push("/login");
+      }
+    };
+
+    checkSession();
+  }, [router]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -141,55 +146,16 @@ const Dashboard = () => {
   useEffect(() => {
     async function fetchDashboardData() {
       console.log("📊 fetchDashboardData called");
-      console.log("📊 SessionData in fetchDashboardData:", sessionData);
       console.log("📊 CurrentUser in fetchDashboardData:", currentUser);
       
-      // If no current user, try to get session multiple times
       if (!currentUser) {
-        console.log('❌ No user found in fetchDashboardData, trying to refresh session...');
-        
-        let attempts = 0;
-        const maxAttempts = 3;
-        let freshSession = null;
-        
-        while (attempts < maxAttempts && !freshSession?.data?.user) {
-          attempts++;
-          console.log(`📊 Session refresh attempt ${attempts}/${maxAttempts}`);
-          
-          try {
-            freshSession = await authClient.getSession();
-            console.log(`📊 Fresh session attempt ${attempts}:`, freshSession);
-            
-            if (freshSession?.data?.user) {
-              console.log("✅ Found user in fresh session!");
-              // The session hook should update automatically, so we don't need to do anything here
-              break;
-            }
-          } catch (error) {
-            console.error(`❌ Error getting session on attempt ${attempts}:`, error);
-          }
-          
-          // Wait before next attempt
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-        
-        if (!freshSession?.data?.user) {
-          console.log('❌ Still no user after refresh attempts, stopping loading');
-          setLoading(false);
-          return;
-        }
-      }
-      
-      const userToUse = currentUser || getUser(sessionData);
-      
-      if (!userToUse) {
-        console.log('❌ No user available after all attempts');
+        console.log('❌ No user found in fetchDashboardData');
         setLoading(false);
         return;
       }
       
       try {
-        const userId = userToUse.id;
+        const userId = currentUser.id;
         console.log("📊 Using userId:", userId);
         
         if (!userId) {
@@ -248,15 +214,26 @@ const Dashboard = () => {
       }
     }
 
-    // Try to fetch data even without currentUser initially, or if pending
-    if (currentUser || isPending || (!currentUser && !isPending)) {
+    // Only fetch if we have a user
+    if (currentUser && !sessionLoading) {
       console.log("📊 Conditions met, calling fetchDashboardData");
       fetchDashboardData();
-    } else {
-      console.log("📊 Fallback: setting loading to false");
+    } else if (!sessionLoading && !currentUser) {
+      console.log("📊 No user and not loading session, setting loading to false");
       setLoading(false);
     }
-  }, [sessionData, currentUser, isPending]);
+  }, [currentUser, sessionLoading]);
+
+  // Debug logging
+  useEffect(() => {
+    console.log("🏠 DASHBOARD COMPONENT STATE:");
+    console.log("  - sessionLoading:", sessionLoading);
+    console.log("  - loading:", loading);
+    console.log("  - currentUser:", currentUser);
+    console.log("  - currentUser?.id:", currentUser?.id);
+    console.log("  - currentUser?.email:", currentUser?.email);
+    console.log("  - currentUser?.name:", currentUser?.name);
+  }, [sessionLoading, loading, currentUser]);
 
   const handleSignOut = async () => {
     try {
@@ -266,6 +243,7 @@ const Dashboard = () => {
       toast.success('Signed out successfully');
       setShowUserMenu(false);
       setShowMobileMenu(false);
+      setCurrentUser(null);
       router.push('/');
     } catch (error) {
       console.error('Error signing out:', error);
@@ -348,21 +326,14 @@ const Dashboard = () => {
     }
   ];
 
-  // Debug loading states
-  console.log("🏠 DASHBOARD RENDER STATE:");
-  console.log("  - isPending:", isPending);
-  console.log("  - loading:", loading);
-  console.log("  - sessionData:", !!sessionData);
-  console.log("  - currentUser:", !!currentUser);
-
-  // Show loading spinner
-  if (isPending) {
-    console.log("🏠 Showing loading because isPending is true");
+  // Show loading spinner while checking session
+  if (sessionLoading) {
+    console.log("🏠 Showing loading because sessionLoading is true");
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-slate-600">Loading session...</p>
+          <p className="mt-4 text-slate-600">Checking authentication...</p>
         </div>
       </div>
     );
@@ -380,7 +351,7 @@ const Dashboard = () => {
     );
   }
 
-  // If no user, redirect to login
+  // If no user, redirect to login (this should have been handled in useEffect)
   if (!currentUser) {
     console.log("🏠 No user found, redirecting to login");
     router.push('/login');
@@ -400,16 +371,15 @@ const Dashboard = () => {
       {/* Debug Panel - Remove this in production */}
       <div className="fixed top-4 right-4 bg-gray-900 text-white p-4 rounded-lg text-xs max-w-xs z-50 overflow-auto max-h-96">
         <h3 className="font-bold mb-2">Dashboard Debug:</h3>
-        <p>isPending: {isPending ? 'true' : 'false'}</p>
+        <p>sessionLoading: {sessionLoading ? 'true' : 'false'}</p>
         <p>loading: {loading ? 'true' : 'false'}</p>
-        <p>hasSessionData: {sessionData ? 'true' : 'false'}</p>
         <p>hasUser: {currentUser ? 'true' : 'false'}</p>
         <p>userID: {currentUser?.id || 'null'}</p>
         <p>posts: {posts.length}</p>
         <p>activities: {activities.length}</p>
         <div className="mt-2 text-xs bg-gray-800 p-2 rounded max-h-32 overflow-auto">
-          <p className="font-bold">Raw Data:</p>
-          <pre>{JSON.stringify(sessionData, null, 1)}</pre>
+          <p className="font-bold">User Data:</p>
+          <pre>{JSON.stringify(currentUser, null, 1)}</pre>
         </div>
       </div>
 
@@ -453,7 +423,7 @@ const Dashboard = () => {
                   onClick={() => setShowUserMenu(!showUserMenu)}
                 >
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={currentUser.image || undefined} alt={currentUser.name || ''} />
+                    <AvatarImage src={currentUser.avatar || undefined} alt={currentUser.name || ''} />
                     <AvatarFallback>{currentUser.name?.charAt(0) || 'U'}</AvatarFallback>
                   </Avatar>
                   <span className="text-sm font-medium">{currentUser.name}</span>
@@ -507,7 +477,7 @@ const Dashboard = () => {
                 {/* User Info */}
                 <div className="flex items-center space-x-3 px-3 py-2 bg-slate-50 rounded-lg mb-2">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={currentUser.image || undefined} alt={currentUser.name || ''} />
+                    <AvatarImage src={currentUser.avatar || undefined} alt={currentUser.name || ''} />
                     <AvatarFallback>{currentUser.name?.charAt(0) || 'U'}</AvatarFallback>
                   </Avatar>
                   <div>
