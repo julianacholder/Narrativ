@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,12 +9,62 @@ import { PenTool, ArrowLeft, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
 import { toast } from "sonner";
+import { authClient } from "@/lib/auth-client";
 
 const Login = () => {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Get session data with proper typing
+  const { data: sessionData, isPending, error } = authClient.useSession();
+
+  // Helper function to safely get user from session data
+  const getUser = (data: any) => {
+    console.log("🔍 Analyzing session data structure:", data);
+    console.log("🔍 Session data type:", typeof data);
+    console.log("🔍 Session data keys:", data ? Object.keys(data) : 'no data');
+    
+    // Handle different possible structures
+    if (!data) return null;
+    
+    // Direct user access
+    if (data.user) {
+      console.log("✅ Found user directly on data");
+      return data.user;
+    }
+    
+    // Maybe it's nested in data property
+    if (data.data && data.data.user) {
+      console.log("✅ Found user in data.data");
+      return data.data.user;
+    }
+    
+    // Maybe user is at root level
+    if (data.id && data.email && data.name) {
+      console.log("✅ Data itself appears to be user");
+      return data;
+    }
+    
+    console.log("❌ No user found in session data");
+    return null;
+  };
+
+  const currentUser = getUser(sessionData);
+
+  // Debug session state on every render
+  useEffect(() => {
+    console.log("🔍 LOGIN COMPONENT SESSION DEBUG:");
+    console.log("  - isPending:", isPending);
+    console.log("  - error:", error);
+    console.log("  - sessionData raw:", sessionData);
+    console.log("  - sessionData stringified:", JSON.stringify(sessionData, null, 2));
+    console.log("  - currentUser:", currentUser);
+    console.log("  - currentUser?.id:", currentUser?.id);
+    console.log("  - currentUser?.email:", currentUser?.email);
+    console.log("  - currentUser?.name:", currentUser?.name);
+  }, [sessionData, isPending, error, currentUser]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,9 +81,10 @@ const Login = () => {
     }
 
     setIsLoading(true);
+    console.log("🔐 Starting login process for email:", email);
 
     try {
-      await signIn.email(
+      const result = await signIn.email(
         {
           email,
           password
@@ -41,20 +92,47 @@ const Login = () => {
         {
           onRequest: (ctx) => {
             console.log("🔐 Login request started...");
+            console.log("🔐 Request context:", ctx);
           },
           onResponse: (ctx) => {
             console.log("✅ Login response received:", ctx);
+            console.log("✅ Response status:", ctx.response.status);
+            console.log("✅ Response ok:", ctx.response.ok);
+            
             setIsLoading(false);
             
             // Check if response is successful
             if (ctx.response.ok) {
-              console.log("✅ Login successful, redirecting to dashboard...");
+              console.log("✅ Login successful, waiting for session to update...");
               toast.success("Login successful!");
               
-              // Add a small delay to ensure session is properly set
-              setTimeout(() => {
-                router.push("/new-post");
-              }, 500);
+              // Wait longer for session to be established
+              setTimeout(async () => {
+                try {
+                  console.log("🔍 Checking session after login...");
+                  
+                  // Try to get fresh session
+                  const freshSession = await authClient.getSession();
+                  console.log("🔍 Fresh session after login:", freshSession);
+                  
+                  const freshUser = getUser(freshSession);
+                  console.log("🔍 Fresh user after login:", freshUser);
+                  
+                  if (freshUser?.id) {
+                    console.log("✅ Session confirmed with user ID, redirecting to dashboard...");
+                    router.push("/dashboard");
+                  } else {
+                    console.log("❌ No user ID found in session, redirecting to new-post as fallback...");
+                    console.log("❌ Fresh session structure:", freshSession);
+                    router.push("/new-post");
+                  }
+                  
+                } catch (sessionError) {
+                  console.error("❌ Error checking session:", sessionError);
+                  router.push("/new-post");
+                }
+              }, 1500); // Increased wait time
+              
             } else {
               console.error("❌ Login failed with status:", ctx.response.status);
               toast.error("Login failed. Please check your credentials.");
@@ -79,6 +157,8 @@ const Login = () => {
           }
         }
       );
+
+      console.log("🔍 SignIn result:", result);
 
     } catch (error) {
       console.error("💥 Login catch error:", error);
@@ -128,6 +208,21 @@ const Login = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+      {/* Debug Panel - Remove this in production */}
+      <div className="fixed top-4 right-4 bg-gray-900 text-white p-4 rounded-lg text-xs max-w-xs z-50 overflow-auto max-h-96">
+        <h3 className="font-bold mb-2">Session Debug:</h3>
+        <p>isPending: {isPending ? 'true' : 'false'}</p>
+        <p>hasSessionData: {sessionData ? 'true' : 'false'}</p>
+        <p>hasUser: {currentUser ? 'true' : 'false'}</p>
+        <p>userID: {currentUser?.id || 'null'}</p>
+        <p>userEmail: {currentUser?.email || 'null'}</p>
+        <p>userName: {currentUser?.name || 'null'}</p>
+        <div className="mt-2 text-xs bg-gray-800 p-2 rounded max-h-32 overflow-auto">
+          <p className="font-bold">Raw Data:</p>
+          <pre>{JSON.stringify(sessionData, null, 1)}</pre>
+        </div>
+      </div>
+
       <div className="w-full max-w-md">
         <div className="flex justify-center mb-8">
           <Button 
