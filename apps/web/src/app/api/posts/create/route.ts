@@ -1,8 +1,8 @@
 // Create this file at: src/app/api/posts/create/route.ts
-import { db } from '@server/db';
-import { posts } from '@server/db/schema';
+import { db } from '@/lib/db';
+import { posts } from '@/lib/db/schema';
 import { NextRequest } from 'next/server';
-import { auth } from '@server/lib/auth';
+import { auth } from '@/lib/auth';
 import { nanoid } from 'nanoid';
 
 export async function POST(request: NextRequest) {
