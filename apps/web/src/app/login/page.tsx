@@ -53,7 +53,7 @@ const Login = () => {
               
               // Add a small delay to ensure session is properly set
               setTimeout(() => {
-                router.push("/dashboard");
+                router.push("/new-post");
               }, 500);
             } else {
               console.error("❌ Login failed with status:", ctx.response.status);
