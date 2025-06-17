@@ -1,5 +1,5 @@
-import { db } from '@server/db';
-import { posts, user } from '@server/db/schema';
+import { db } from '@/lib/db';
+import { posts, user } from '@/lib/db/schema';
 import { eq, ne, and } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 
