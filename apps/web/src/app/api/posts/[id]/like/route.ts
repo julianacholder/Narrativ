@@ -1,5 +1,5 @@
-import { db } from '@server/db';
-import { postLikes } from '@server/db/schema';
+import { db } from '@/lib/db';
+import { postLikes } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { nanoid } from 'nanoid';

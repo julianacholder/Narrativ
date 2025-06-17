@@ -28,13 +28,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  avatar?: string;
-}
+import { useCategories } from "@/lib/categories";
+import { CategoryBadge } from "@/components/ui/category-badge";
+import { CategoryStats } from "@/components/ui/category-stats";
 
 interface Post {
   id: string;
@@ -60,72 +56,24 @@ interface Activity {
 
 const Dashboard = () => {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { data: session, isPending } = authClient.useSession();
   const [posts, setPosts] = useState<Post[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sessionLoading, setSessionLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Function to fetch session from API
-  const fetchSession = async () => {
-    try {
-      console.log("🏠 Fetching session from /api/auth/session");
-      const response = await fetch('/api/auth/session', {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
+  const { getCategoryColor, getCategoryLabel } = useCategories();
 
-      if (!response.ok) {
-        console.error("❌ Session API response not ok:", response.status);
-        return null;
-      }
-
-      const data = await response.json();
-      console.log("✅ Session API response:", data);
-      
-      return data.user || null;
-    } catch (error) {
-      console.error("💥 Error fetching session:", error);
-      return null;
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isPending && !session?.user) {
+      console.log('❌ No authenticated user, redirecting to login');
+      router.push('/login');
     }
-  };
-
-  // Debug when component mounts
-  useEffect(() => {
-    console.log("🏠 Dashboard component mounted");
-    
-    return () => {
-      console.log("🏠 Dashboard component unmounted");
-    };
-  }, []);
-
-  // Check for session on component mount
-  useEffect(() => {
-    const checkSession = async () => {
-      console.log("🏠 Checking session on dashboard mount...");
-      setSessionLoading(true);
-      
-      const user = await fetchSession();
-      console.log("🏠 Dashboard session check result:", user);
-      
-      setCurrentUser(user);
-      setSessionLoading(false);
-      
-      if (!user) {
-        console.log("❌ No user found, redirecting to login");
-        router.push("/login");
-      }
-    };
-
-    checkSession();
-  }, [router]);
+  }, [session, isPending, router]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -145,26 +93,23 @@ const Dashboard = () => {
 
   useEffect(() => {
     async function fetchDashboardData() {
-      console.log("📊 fetchDashboardData called");
-      console.log("📊 CurrentUser in fetchDashboardData:", currentUser);
-      
-      if (!currentUser) {
-        console.log('❌ No user found in fetchDashboardData');
+      if (!session?.user) {
+        console.log('❌ No session or user found');
         setLoading(false);
         return;
       }
       
       try {
-        const userId = currentUser.id;
-        console.log("📊 Using userId:", userId);
+        const userId = session.user.id;
         
         if (!userId) {
-          console.error('❌ No userId found in user data');
+          console.error('❌ No userId found in session');
           setLoading(false);
           return;
         }
         
-        console.log("📊 Fetching posts for userId:", userId);
+        console.log('📊 Fetching dashboard data for user:', userId);
+        
         const postsResponse = await fetch(`/api/users/posts?userId=${userId}`, {
           method: 'GET',
           credentials: 'include',
@@ -173,12 +118,9 @@ const Dashboard = () => {
           }
         });
 
-        console.log("📊 Posts response status:", postsResponse.status);
-        console.log("📊 Posts response ok:", postsResponse.ok);
-
         if (postsResponse.ok) {
           const postsData = await postsResponse.json();
-          console.log("📊 Posts data received:", postsData);
+          console.log('✅ Posts loaded:', postsData.length);
           setPosts(postsData);
         } else {
           const errorText = await postsResponse.text();
@@ -186,7 +128,6 @@ const Dashboard = () => {
           toast.error('Failed to load posts');
         }
 
-        console.log("📊 Fetching activities for userId:", userId);
         const activitiesResponse = await fetch(`/api/users/activities?userId=${userId}`, {
           method: 'GET',
           credentials: 'include',
@@ -195,45 +136,24 @@ const Dashboard = () => {
           }
         });
         
-        console.log("📊 Activities response status:", activitiesResponse.status);
-        console.log("📊 Activities response ok:", activitiesResponse.ok);
-        
         if (activitiesResponse.ok) {
           const activitiesData = await activitiesResponse.json();
-          console.log("📊 Activities data received:", activitiesData);
+          console.log('✅ Activities loaded:', activitiesData.length);
           setActivities(activitiesData);
-        } else {
-          console.log("⚠️ Activities fetch failed, but continuing...");
         }
 
       } catch (error) {
         console.error('💥 Error fetching dashboard data:', error);
+        toast.error('Failed to load dashboard data');
       } finally {
-        console.log("📊 Setting loading to false");
         setLoading(false);
       }
     }
 
-    // Only fetch if we have a user
-    if (currentUser && !sessionLoading) {
-      console.log("📊 Conditions met, calling fetchDashboardData");
+    if (session?.user) {
       fetchDashboardData();
-    } else if (!sessionLoading && !currentUser) {
-      console.log("📊 No user and not loading session, setting loading to false");
-      setLoading(false);
     }
-  }, [currentUser, sessionLoading]);
-
-  // Debug logging
-  useEffect(() => {
-    console.log("🏠 DASHBOARD COMPONENT STATE:");
-    console.log("  - sessionLoading:", sessionLoading);
-    console.log("  - loading:", loading);
-    console.log("  - currentUser:", currentUser);
-    console.log("  - currentUser?.id:", currentUser?.id);
-    console.log("  - currentUser?.email:", currentUser?.email);
-    console.log("  - currentUser?.name:", currentUser?.name);
-  }, [sessionLoading, loading, currentUser]);
+  }, [session]);
 
   const handleSignOut = async () => {
     try {
@@ -243,7 +163,6 @@ const Dashboard = () => {
       toast.success('Signed out successfully');
       setShowUserMenu(false);
       setShowMobileMenu(false);
-      setCurrentUser(null);
       router.push('/');
     } catch (error) {
       console.error('Error signing out:', error);
@@ -258,7 +177,7 @@ const Dashboard = () => {
         label: 'Delete',
         onClick: async () => {
           try {
-            const userId = currentUser?.id;
+            const userId = session?.user?.id;
             
             if (!userId) {
               toast.error('Authentication error');
@@ -326,65 +245,29 @@ const Dashboard = () => {
     }
   ];
 
-  // Show loading spinner while checking session
-  if (sessionLoading) {
-    console.log("🏠 Showing loading because sessionLoading is true");
+  // Show loading while session is pending or data is loading
+  if (isPending || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-slate-600">Checking authentication...</p>
+          <p className="mt-4 text-slate-600">
+            {isPending ? 'Checking authentication...' : 'Loading dashboard...'}
+          </p>
         </div>
       </div>
     );
   }
 
-  if (loading) {
-    console.log("🏠 Showing loading because loading state is true");
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-slate-600">Loading dashboard...</p>
-        </div>
-      </div>
-    );
+  // Don't render anything if no user (redirect will happen)
+  if (!session?.user) {
+    return null;
   }
-
-  // If no user, redirect to login (this should have been handled in useEffect)
-  if (!currentUser) {
-    console.log("🏠 No user found, redirecting to login");
-    router.push('/login');
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-slate-600">Redirecting to login...</p>
-        </div>
-      </div>
-    );
-  }
-
-  console.log("🏠 Rendering dashboard with user:", currentUser);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Debug Panel - Remove this in production */}
-      <div className="fixed top-4 right-4 bg-gray-900 text-white p-4 rounded-lg text-xs max-w-xs z-50 overflow-auto max-h-96">
-        <h3 className="font-bold mb-2">Dashboard Debug:</h3>
-        <p>sessionLoading: {sessionLoading ? 'true' : 'false'}</p>
-        <p>loading: {loading ? 'true' : 'false'}</p>
-        <p>hasUser: {currentUser ? 'true' : 'false'}</p>
-        <p>userID: {currentUser?.id || 'null'}</p>
-        <p>posts: {posts.length}</p>
-        <p>activities: {activities.length}</p>
-        <div className="mt-2 text-xs bg-gray-800 p-2 rounded max-h-32 overflow-auto">
-          <p className="font-bold">User Data:</p>
-          <pre>{JSON.stringify(currentUser, null, 1)}</pre>
-        </div>
-      </div>
-
       {/* Mobile-Responsive Navigation */}
-      <nav className="border-b bg-white/90 backdrop-blur-md sticky top-0 z-40 shadow-sm">
+      <nav className="border-b bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <Link href="/" className="flex items-center space-x-2">
@@ -423,18 +306,18 @@ const Dashboard = () => {
                   onClick={() => setShowUserMenu(!showUserMenu)}
                 >
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={currentUser.avatar || undefined} alt={currentUser.name || ''} />
-                    <AvatarFallback>{currentUser.name?.charAt(0) || 'U'}</AvatarFallback>
+                    <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
+                    <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
                   </Avatar>
-                  <span className="text-sm font-medium">{currentUser.name}</span>
+                  <span className="text-sm font-medium">{session.user.name}</span>
                   <ChevronDown className="h-4 w-4" />
                 </Button>
                 
                 {showUserMenu && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border">
                     <div className="px-4 py-2 border-b">
-                      <p className="text-sm font-medium text-gray-900">{currentUser.name}</p>
-                      <p className="text-sm text-gray-500 truncate">{currentUser.email}</p>
+                      <p className="text-sm font-medium text-gray-900">{session.user.name}</p>
+                      <p className="text-sm text-gray-500 truncate">{session.user.email}</p>
                     </div>
                     <Link href="/profile">
                       <button 
@@ -477,12 +360,12 @@ const Dashboard = () => {
                 {/* User Info */}
                 <div className="flex items-center space-x-3 px-3 py-2 bg-slate-50 rounded-lg mb-2">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={currentUser.avatar || undefined} alt={currentUser.name || ''} />
-                    <AvatarFallback>{currentUser.name?.charAt(0) || 'U'}</AvatarFallback>
+                    <AvatarImage src={session.user.image || undefined} alt={session.user.name || ''} />
+                    <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium text-sm">{currentUser.name}</p>
-                    <p className="text-xs text-gray-500">{currentUser.email}</p>
+                    <p className="font-medium text-sm">{session.user.name}</p>
+                    <p className="text-xs text-gray-500">{session.user.email}</p>
                   </div>
                 </div>
 
@@ -547,7 +430,7 @@ const Dashboard = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
-            Welcome, {currentUser.name}
+            Welcome, {session.user.name}
           </h1>
           <p className="text-slate-600">Manage your blog posts and track your performance</p>
         </div>
@@ -599,7 +482,7 @@ const Dashboard = () => {
                             >
                               {post.status}
                             </Badge>
-                            <Badge variant="secondary">{post.category}</Badge>
+                            <CategoryBadge category={post.category} />
                             <span className="flex items-center">
                               <Calendar className="h-3 w-3 md:h-4 md:w-4 mr-1" />
                               {new Date(post.date).toLocaleDateString()}
@@ -702,32 +585,8 @@ const Dashboard = () => {
 
           {/* Analytics Sidebar */}
           <div className="space-y-4 md:space-y-6">
-            {/* Simple category stats */}
-            <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-lg">Category Breakdown</CardTitle>
-                <CardDescription className="text-sm">Posts by category</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {posts.length > 0 ? (
-                    Object.entries(
-                      posts.reduce((acc, post) => {
-                        acc[post.category] = (acc[post.category] || 0) + 1;
-                        return acc;
-                      }, {} as Record<string, number>)
-                    ).map(([category, count]) => (
-                      <div key={category} className="flex justify-between items-center">
-                        <span className="text-sm text-slate-600">{category}</span>
-                        <Badge variant="secondary">{count}</Badge>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">No posts to categorize yet</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            {/* Using the CategoryStats component */}
+            <CategoryStats posts={posts} />
 
             {/* Quick Actions */}
             <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">

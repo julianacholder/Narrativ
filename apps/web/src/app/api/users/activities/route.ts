@@ -1,9 +1,9 @@
 // Create this file at: src/app/api/users/activities/route.ts
-import { db } from '@server/db';
-import { comments, posts, postLikes, user } from '@server/db/schema';
+import { db } from '@/lib/db';
+import { comments, posts, postLikes, user } from '@/lib/db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
-import { auth } from '@server/lib/auth';
+import { auth } from '@/lib/auth';
 
 // Define the Activity type
 interface Activity {

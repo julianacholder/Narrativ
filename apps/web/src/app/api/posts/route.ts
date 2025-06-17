@@ -1,5 +1,5 @@
-import { db } from '@server/db';
-import { posts, user, comments, postLikes } from '@server/db/schema';
+import { db } from '@/lib/db';
+import { posts, user, comments, postLikes } from '@/lib/db/schema';
 import { eq, count, desc } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 

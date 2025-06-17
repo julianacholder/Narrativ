@@ -1,9 +1,9 @@
 
-import { db } from '@server/db';
-import { posts } from '@server/db/schema';
+import { db } from '@/lib/db';
+import { posts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
-import { auth } from '@server/lib/auth';
+import { auth } from '@/lib/auth';
 
 export async function DELETE(
   request: NextRequest,

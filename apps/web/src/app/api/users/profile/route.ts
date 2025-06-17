@@ -1,7 +1,7 @@
 // File: /api/users/profile/route.ts
 
-import { db } from '@server/db';
-import { user } from '@server/db/schema';
+import { db } from '@/lib/db';
+import { user } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 

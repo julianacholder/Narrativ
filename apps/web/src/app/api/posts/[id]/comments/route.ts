@@ -1,9 +1,9 @@
-import { db } from '@server/db';
-import { comments, user } from '@server/db/schema';
+import { db } from '@/lib/db';
+import { comments, user } from '@/lib/db/schema';
 import { eq, desc, isNull, and } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { nanoid } from 'nanoid';
-import { auth } from '@server/lib/auth';
+import { auth } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,

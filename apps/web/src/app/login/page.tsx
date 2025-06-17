@@ -7,80 +7,42 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PenTool, ArrowLeft, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { signIn } from "@/lib/auth-client";
+import { signIn, useSession } from "@/lib/auth-client";
 import { toast } from "sonner";
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  avatar?: string;
-}
 
 const Login = () => {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [sessionLoading, setSessionLoading] = useState(true);
 
-  // Function to fetch session from API
-  const fetchSession = async () => {
-    try {
-      console.log("🔍 Fetching session from /api/auth/session");
-      const response = await fetch('/api/auth/session', {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
+  // Check if user is already logged in
+  const { data: session, isPending } = useSession();
 
-      if (!response.ok) {
-        console.error("❌ Session API response not ok:", response.status);
-        return null;
-      }
-
-      const data = await response.json();
-      console.log("✅ Session API response:", data);
-      
-      return data.user || null;
-    } catch (error) {
-      console.error("💥 Error fetching session:", error);
-      return null;
+  // Redirect if already logged in
+  useEffect(() => {
+    if (session?.user && !isPending) {
+      console.log("✅ User already logged in, redirecting to dashboard");
+      router.push("/dashboard");
     }
-  };
+  }, [session, isPending, router]);
 
-  // Check for existing session on component mount
-  useEffect(() => {
-    const checkSession = async () => {
-      console.log("🔍 Checking for existing session...");
-      setSessionLoading(true);
-      
-      const user = await fetchSession();
-      console.log("🔍 Initial session check result:", user);
-      
-      setCurrentUser(user);
-      setSessionLoading(false);
-      
-      // If user is already logged in, redirect to dashboard
-      if (user) {
-        console.log("✅ User already logged in, redirecting to dashboard");
-        router.push("/dashboard");
-      }
-    };
+  // Show loading while checking session
+  if (isPending) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-slate-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
-    checkSession();
-  }, [router]);
-
-  // Debug logging
-  useEffect(() => {
-    console.log("🔍 LOGIN COMPONENT STATE:");
-    console.log("  - sessionLoading:", sessionLoading);
-    console.log("  - currentUser:", currentUser);
-    console.log("  - isLoading:", isLoading);
-  }, [sessionLoading, currentUser, isLoading]);
+  // Don't render login form if user is already logged in
+  if (session?.user) {
+    return null;
+  }
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,10 +59,9 @@ const Login = () => {
     }
 
     setIsLoading(true);
-    console.log("🔐 Starting login process for email:", email);
 
     try {
-      const result = await signIn.email(
+      await signIn.email(
         {
           email,
           password
@@ -109,55 +70,21 @@ const Login = () => {
           onRequest: (ctx) => {
             console.log("🔐 Login request started...");
           },
-          onResponse: async (ctx) => {
+          onResponse: (ctx) => {
             console.log("✅ Login response received:", ctx);
-            console.log("✅ Response status:", ctx.response.status);
-            console.log("✅ Response ok:", ctx.response.ok);
+            setIsLoading(false);
             
             // Check if response is successful
             if (ctx.response.ok) {
-              console.log("✅ Login successful, checking session...");
+              console.log("✅ Login successful, redirecting to dashboard...");
               toast.success("Login successful!");
               
-              // Wait a moment for session to be established, then check
-              setTimeout(async () => {
-                console.log("🔍 Fetching fresh session after login...");
-                
-                let attempts = 0;
-                const maxAttempts = 5;
-                let user = null;
-                
-                // Retry session check multiple times
-                while (attempts < maxAttempts && !user) {
-                  attempts++;
-                  console.log(`🔍 Session check attempt ${attempts}/${maxAttempts}`);
-                  
-                  user = await fetchSession();
-                  
-                  if (user) {
-                    console.log("✅ Session confirmed, redirecting to dashboard");
-                    setCurrentUser(user);
-                    setIsLoading(false);
-                    router.push("/dashboard");
-                    return;
-                  }
-                  
-                  // Wait before next attempt
-                  if (attempts < maxAttempts) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                  }
-                }
-                
-                if (!user) {
-                  console.log("❌ No session found after multiple attempts, redirecting anyway");
-                  setIsLoading(false);
-                  router.push("/dashboard");
-                }
-              }, 1000);
-              
+              // Add a small delay to ensure session is properly set
+              setTimeout(() => {
+                router.push("/dashboard");
+              }, 500);
             } else {
               console.error("❌ Login failed with status:", ctx.response.status);
-              setIsLoading(false);
               toast.error("Login failed. Please check your credentials.");
             }
           },
@@ -180,8 +107,6 @@ const Login = () => {
           }
         }
       );
-
-      console.log("🔍 SignIn result:", result);
 
     } catch (error) {
       console.error("💥 Login catch error:", error);
@@ -229,35 +154,8 @@ const Login = () => {
     }
   };
 
-  // Show loading while checking initial session
-  if (sessionLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-slate-600">Checking authentication...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
-      {/* Debug Panel - Remove this in production */}
-      <div className="fixed top-4 right-4 bg-gray-900 text-white p-4 rounded-lg text-xs max-w-xs z-50 overflow-auto max-h-96">
-        <h3 className="font-bold mb-2">Session Debug:</h3>
-        <p>sessionLoading: {sessionLoading ? 'true' : 'false'}</p>
-        <p>isLoading: {isLoading ? 'true' : 'false'}</p>
-        <p>hasUser: {currentUser ? 'true' : 'false'}</p>
-        <p>userID: {currentUser?.id || 'null'}</p>
-        <p>userEmail: {currentUser?.email || 'null'}</p>
-        <p>userName: {currentUser?.name || 'null'}</p>
-        <div className="mt-2 text-xs bg-gray-800 p-2 rounded max-h-32 overflow-auto">
-          <p className="font-bold">User Data:</p>
-          <pre>{JSON.stringify(currentUser, null, 1)}</pre>
-        </div>
-      </div>
-
       <div className="w-full max-w-md">
         <div className="flex justify-center mb-8">
           <Button 

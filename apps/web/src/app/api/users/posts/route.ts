@@ -1,9 +1,9 @@
 // Real Posts API with Authentication and Database
-import { db } from '@server/db';
-import { posts, comments, postLikes } from '@server/db/schema';
+import { db } from '@/lib/db';
+import { posts, comments, postLikes } from '@/lib/db/schema';
 import { eq, count, desc } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
-import { auth } from '@server/lib/auth';
+import { auth } from '@/lib/auth';
 import { image } from '@uiw/react-md-editor';
 
 export async function GET(request: NextRequest) {
