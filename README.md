@@ -2,6 +2,8 @@
 
 A modern, full-stack blogging platform built with Next.js, Better Auth, and Drizzle ORM. Create, manage, and share your stories with a beautiful, responsive interface.
 
+## Live Demo: https://narrativ-web.vercel.app
+
 ## ✨ Features
 
 - **🔐 Authentication** - Secure email/password and Google OAuth login
