@@ -105,63 +105,22 @@ const Login = () => {
             console.log("✅ Response status:", ctx.response.status);
             console.log("✅ Response ok:", ctx.response.ok);
             
-            setIsLoading(false);
-            
             // Check if response is successful
             if (ctx.response.ok) {
-              console.log("✅ Login successful, waiting for session to update...");
+              console.log("✅ Login successful, redirecting to dashboard...");
               toast.success("Login successful!");
               
-              // Wait longer for session to be established
-              setTimeout(async () => {
-                try {
-                  console.log("🔍 Checking session after login...");
-                  
-                  // Try multiple approaches to get the session
-                  let attempts = 0;
-                  const maxAttempts = 5;
-                  let freshSession = null;
-                  
-                  while (attempts < maxAttempts && !freshSession?.data?.user) {
-                    attempts++;
-                    console.log(`🔍 Session check attempt ${attempts}/${maxAttempts}`);
-                    
-                    freshSession = await authClient.getSession();
-                    console.log(`🔍 Fresh session attempt ${attempts}:`, freshSession);
-                    
-                    if (freshSession?.data?.user) {
-                      break;
-                    }
-                    
-                    // Wait a bit before next attempt
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                  }
-                  
-                  const freshUser = getUser(freshSession);
-                  console.log("🔍 Fresh user after login:", freshUser);
-                  
-                  if (freshUser?.id) {
-                    console.log("✅ Session confirmed with user ID, redirecting to dashboard...");
-                    router.push("/dashboard");
-                  } else {
-                    console.log("❌ No user ID found in session after multiple attempts");
-                    console.log("❌ Final session structure:", freshSession);
-                    
-                    // Since login was successful but session isn't available, 
-                    // try redirecting to dashboard anyway - it might work on the dashboard side
-                    console.log("🔄 Attempting dashboard redirect despite missing session...");
-                    router.push("/dashboard");
-                  }
-                  
-                } catch (sessionError) {
-                  console.error("❌ Error checking session:", sessionError);
-                  // Try dashboard anyway since login was successful
-                  router.push("/dashboard");
-                }
-              }, 1000);
+              // Since session isn't working, redirect immediately to dashboard
+              // The server should have set the session cookies, dashboard will handle auth
+              console.log("🔄 Redirecting to dashboard immediately (session will be checked there)");
+              setTimeout(() => {
+                setIsLoading(false);
+                router.push("/dashboard");
+              }, 500);
               
             } else {
               console.error("❌ Login failed with status:", ctx.response.status);
+              setIsLoading(false);
               toast.error("Login failed. Please check your credentials.");
             }
           },

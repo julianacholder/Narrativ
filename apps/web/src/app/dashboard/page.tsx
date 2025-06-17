@@ -248,25 +248,13 @@ const Dashboard = () => {
       }
     }
 
-    // Try to fetch data if we have any indication of a user or if we're still pending
-    if (currentUser || isPending) {
+    // Try to fetch data even without currentUser initially, or if pending
+    if (currentUser || isPending || (!currentUser && !isPending)) {
       console.log("📊 Conditions met, calling fetchDashboardData");
       fetchDashboardData();
     } else {
-      console.log("📊 Conditions not met for fetchDashboardData:");
-      console.log("  - has currentUser:", !!currentUser);
-      console.log("  - isPending:", isPending);
-      
-      // Give it more time if we just finished pending
-      if (!isPending && !currentUser) {
-        console.log("📊 No user found and not pending, waiting a bit more before giving up...");
-        setTimeout(() => {
-          if (!getUser(sessionData)) {
-            console.log("📊 Still no user after extra wait, setting loading to false");
-            setLoading(false);
-          }
-        }, 2000);
-      }
+      console.log("📊 Fallback: setting loading to false");
+      setLoading(false);
     }
   }, [sessionData, currentUser, isPending]);
 
