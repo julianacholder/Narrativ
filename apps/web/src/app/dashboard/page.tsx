@@ -390,7 +390,7 @@ const Dashboard = () => {
                   </Button>
                 </Link>
 
-                <Link href="/my-blog">
+                <Link href="/my-posts">
                   <Button 
                     variant="ghost" 
                     className="w-full justify-start hover:text-indigo-600"
